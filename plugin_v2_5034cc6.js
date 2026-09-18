@@ -169,74 +169,27 @@ function ChipMenu() {
   })
 }
 
-// Persistent fallback for the chip: when the focused session has no live
-// usage yet (old/resumed session, agent not loaded), fetch its totals
-// from state.db via usage.history deep-dive. Runs only when needed.
-function usePersistedUsage(enabled, sid) {
-  const query = useQuery({
-    queryKey: [ID, 'persisted', sid],
-    queryFn: async () => {
-      try {
-        const res = await host.request('usage.history', { session_id: sid, models: true })
-        return { ok: true, res }
-      } catch (e) {
-        return { ok: false, error: String(e && e.message ? e.message : e) }
-      }
-    },
-    enabled: enabled && Boolean(sid),
-    refetchInterval: 60_000,
-    retry: false,
-  })
-  if (query.data && query.data.ok) {
-    const s = (query.data.res.sessions || [])[0]
-    if (!s) return null
-    return {
-      input: s.input_tokens || 0,
-      cache_read: s.cache_read_tokens || 0,
-      output: s.output_tokens || 0,
-      calls: s.api_call_count || 0,
-      model: s.model || '',
-      persisted: true,
-    }
-  }
-  return null
-}
-
 // ── Statusbar Chip ─────────────────────────────────────────────────
 
 function TokenChip() {
-  // ALL hooks unconditionally first (short-circuiting between hooks changes
-  // the hook count between renders → React crash on session switches).
   const usage = useValue(host.state.focusedUsage)
-  const focusedSid = useValue(host.state.focusedSessionId)
-  const activeSid = useValue(host.state.activeSessionId)
   const breakdown = useContextBreakdown(true)
   const show = useValue(showMap)
   const menuOpen = useValue(menuOpenMap)
-  const sid = focusedSid || activeSid
-  // Live usage covers sessions that ran a turn in THIS process. Older
-  // sessions report nothing live — fall back to persistent DB totals.
-  const hasLive = Boolean(usage && (usage.total || usage.input || usage.output || usage.calls))
-  const persisted = usePersistedUsage(!hasLive, sid)
   // The breakdown wins whenever we have one — it reports the MEASURED
   // occupancy once the backend has it and is keyed to this session; the
   // streamed usage only carries context fields after a turn ran here.
   const u = breakdown
     ? { ...(usage || {}), ...breakdown }
     : (usage || {})
-  // Merge: live values win; persisted totals fill the gaps for old sessions.
-  const isPersisted = !hasLive && Boolean(persisted)
-  const input = (u.input || 0) || (isPersisted ? persisted.input : 0)
-  const cached = u.cache_read || (isPersisted ? persisted.cache_read : 0)
-  const out = u.output || (isPersisted ? persisted.output : 0)
-  const calls = u.calls || (isPersisted ? persisted.calls : 0)
-  const model = u.model || (isPersisted ? persisted.model : '')
-  const total = u.total || (input + cached + out)
+  const total = u.total || 0
+  const cached = u.cache_read || 0
   const hitPct = u.cache_hit_pct
   const ctxPct = u.context_percent
   const ctxUsed = u.context_used
   const ctxMax = u.context_max
-  const cost = estimateCost({ input, cache_read: cached, output: out, model })
+  const cost = estimateCost(u)
+  const calls = u.calls || 0
 
   return jsxs('div', {
     className: 'relative inline-flex h-full items-center',
@@ -244,7 +197,7 @@ function TokenChip() {
       jsxs('button', {
         type: 'button',
         className: 'inline-flex h-full items-center gap-1.5 px-1.5 text-[0.6875rem] text-(--ui-text-tertiary) tabular-nums cursor-pointer hover:text-(--ui-text-secondary)',
-        title: `Klick: Anzeige konfigurieren${isPersisted ? ' · 📚 DB-Werte (keine Live-Session)' : ''}\n\nInput: ${fmtFull(input)} · Cached: ${fmtFull(cached)}${hitPct != null ? ` (${hitPct}%)` : ''} · Output: ${fmtFull(out)} · Total: ${fmtFull(total)}`
+        title: `Klick: Anzeige konfigurieren\n\nInput: ${fmtFull(u.input || 0)} · Cached: ${fmtFull(cached)}${hitPct != null ? ` (${hitPct}%)` : ''} · Output: ${fmtFull(u.output || 0)} · Total: ${fmtFull(total)}`
           + (ctxPct != null && ctxMax > 0 ? `\nContext: ${fmtFull(ctxUsed)} / ${fmtFull(ctxMax)} tokens (${ctxPct}%)` : '')
           + (cost != null ? `\nKosten: ${(cost * EUR_RATE).toFixed(2)} €` : '')
           + (calls > 0 ? `\nAPI calls: ${fmtFull(calls)}` : ''),
