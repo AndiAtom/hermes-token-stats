@@ -140,6 +140,9 @@ function mergeUsage(sid, usage) {
   usageMap.set({ ...usageMap.get(), [sid]: { ...cur, ...usage } })
 }
 
+// History window for the pane (days): 7, 30, or 0 = all time.
+const historyDays = atom(30)
+
 // ── Chip menu (popover) ─────────────────────────────────────────────
 
 function ChipMenu() {
@@ -258,43 +261,151 @@ function TokenChip() {
 }
 
 // ── Pane ───────────────────────────────────────────────────────────
+// Data model: the pane is backed by PERSISTENT gateway data (usage.history
+// RPC → state.db) so sessions from other clients and pre-restart sessions
+// show real numbers. Live session.usage events overlay the focused session.
+// When usage.history is unavailable (older gateway), the pane falls back to
+// the legacy live-event map only and marks itself "live only".
+
+function HistoryQuery(days) {
+  // Persistent per-session totals + per-model rows from state.db.
+  return useQuery({
+    queryKey: [ID, 'usageHistory', days],
+    queryFn: async () => {
+      try {
+        const res = await host.request('usage.history', { days, limit: 200, models: true })
+        return { ok: true, res }
+      } catch (e) {
+        return { ok: false, error: String(e && e.message ? e.message : e) }
+      }
+    },
+    refetchInterval: 30_000,
+    retry: false,
+  })
+}
+
+function fmtDate(ts) {
+  if (!ts) return ''
+  const d = new Date(ts * 1000)
+  return d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })
+}
 
 function TokenPane() {
   const focusedSid = useValue(host.state.focusedSessionId)
   const allUsage = useValue(usageMap)
+  const days = useValue(historyDays)
   const breakdown = useContextBreakdown(true)
+
+  const hist = HistoryQuery(days)
+  const histOk = hist.data && hist.data.ok
+  const histSessions = histOk ? (hist.data.res.sessions || []) : []
+  const histByModel = histOk ? (hist.data.res.model_usage || []) : []
+  // model_usage rows → { [sid]: [modelRows] }
+  const modelRowsBySid = {}
+  for (const r of histByModel) {
+    const sid = r.session_id
+    if (!modelRowsBySid[sid]) modelRowsBySid[sid] = []
+    modelRowsBySid[sid].push(r)
+  }
+
   const { data: sessionList } = useQuery({
     queryKey: [ID, 'sessions'],
     queryFn: () => host.request('session.list', { limit: 200 }),
     refetchInterval: 10_000,
   })
 
-  const sessions = sessionList?.sessions || []
-  // Fold the focused session's context breakdown into the per-session map so
-  // the 📊 column shows a fill estimate even for resumed sessions.
-  const usageFor = (sid) => {
-    const u = allUsage[sid] || {}
-    if (sid === focusedSid && breakdown) return { ...u, ...breakdown }
-    return u
-  }
-  const entries = Object.entries(allUsage)
+  // Build the unified row set: persistent rows first (source of truth),
+  // then any live session not yet in the history window appended live-only.
+  const sessionTitles = {}
+  for (const s of (sessionList?.sessions || [])) sessionTitles[s.id] = s.title
 
-  // Aggregate
-  const grandInput = entries.reduce((s, [, u]) => s + (u.input || 0), 0)
-  const grandCached = entries.reduce((s, [, u]) => s + (u.cache_read || 0), 0)
-  const grandOutput = entries.reduce((s, [, u]) => s + (u.output || 0), 0)
-  const grandTotal = entries.reduce((s, [, u]) => s + (u.total || 0), 0)
+  const rows = []
+  const seenIds = new Set()
+  for (const h of histSessions) {
+    const live = allUsage[h.id]
+    // Live in-memory values are the freshest for a running session; persistent
+    // row values are flushed periodically. Merge: persistent base, live wins.
+    const u = live
+      ? { ...h, ...live, model: h.model || live.model }
+      : h
+    rows.push({
+      id: h.id,
+      title: sessionTitles[h.id] || h.title || h.id.slice(0, 12),
+      isLiveOnly: false,
+      lastActive: h.last_active,
+      modelRows: modelRowsBySid[h.id] || [],
+      u: {
+        input: u.input_tokens != null ? u.input_tokens : (u.input || 0),
+        cache_read: u.cache_read_tokens != null ? u.cache_read_tokens : (u.cache_read || 0),
+        output: u.output_tokens != null ? u.output_tokens : (u.output || 0),
+        context_percent: u.context_percent,
+        context_used: u.context_used,
+        context_max: u.context_max,
+        context_estimated: u.context_estimated,
+        cache_hit_pct: u.cache_hit_pct,
+        model: u.model || '',
+      },
+    })
+    seenIds.add(h.id)
+  }
+  for (const s of (sessionList?.sessions || [])) {
+    if (seenIds.has(s.id)) continue
+    const live = allUsage[s.id]
+    if (!live) continue
+    rows.push({
+      id: s.id,
+      title: s.title || s.id.slice(0, 12),
+      isLiveOnly: true,
+      lastActive: null,
+      modelRows: [],
+      u: {
+        input: live.input || 0,
+        cache_read: live.cache_read || 0,
+        output: live.output || 0,
+        context_percent: live.context_percent,
+        context_used: live.context_used,
+        context_max: live.context_max,
+        context_estimated: live.context_estimated,
+        cache_hit_pct: live.cache_hit_pct,
+        model: live.model || '',
+      },
+    })
+  }
+
+  const usageFor = (row) => {
+    if (row.id === focusedSid && breakdown) return { ...row.u, ...breakdown }
+    return row.u
+  }
+
+  // Aggregate over the unified rows (persistent = all rows in window).
+  const grandInput = rows.reduce((s, r) => s + (r.u.input || 0), 0)
+  const grandCached = rows.reduce((s, r) => s + (r.u.cache_read || 0), 0)
+  const grandOutput = rows.reduce((s, r) => s + (r.u.output || 0), 0)
 
   return jsxs('div', {
     className: 'flex h-full flex-col gap-2 p-3 text-xs overflow-hidden',
     children: [
-      // Header
+      // Header + history window selector
       jsxs('div', {
         className: 'flex items-center justify-between shrink-0',
         children: [
           jsx('span', { className: 'font-medium text-sm', children: 'Token Stats' }),
-          jsxs('span', { className: 'text-(--ui-text-quaternary) tabular-nums', children: [
-            entries.length, ' session', entries.length === 1 ? '' : 's',
+          jsxs('div', { className: 'flex items-center gap-1.5', children: [
+            histOk === false
+              ? jsx('span', {
+                  className: 'text-[0.625rem] text-amber-500',
+                  title: 'usage.history RPC nicht verfügbar — nur Live-Sessions sichtbar.\nGateway-Modul: /root/Private/hermes-usage-history-rpc',
+                  children: 'live only' })
+              : null,
+            ...[7, 30, 0].map(d => jsx('button', {
+              type: 'button',
+              className: (d === days
+                ? 'bg-(--ui-accent) text-(--card)'
+                : 'text-(--ui-text-quaternary) hover:bg-(--ui-stroke-secondary)') +
+                ' rounded-sm px-1.5 py-0.5 text-[0.625rem] cursor-pointer',
+              onClick: () => { historyDays.set(d) },
+              children: d === 0 ? '∞' : d + 'd',
+            }, 'd' + d)),
           ]}),
         ]
       }),
@@ -323,17 +434,13 @@ function TokenPane() {
             jsx('span', { className: 'text-(--ui-text-quaternary) text-[0.625rem]', children: 'OUTPUT' }),
             jsx('span', { className: 'font-medium tabular-nums', children: fmt(grandOutput) }),
           ]}),
-          jsxs('div', { className: 'flex flex-col items-center gap-0.5', children: [
-            jsx('span', { className: 'text-(ui-text-quaternary) text-[0.625rem]', children: 'TOTAL' }),
-            jsx('span', { className: 'font-medium tabular-nums text-(--ui-accent)', children: fmt(grandTotal) }),
-          ]}),
         ]
       }),
 
       // Session list
       jsx('div', {
         className: 'flex-1 overflow-auto',
-        children: sessions.length === 0
+        children: rows.length === 0
           ? jsx('div', { className: 'text-(--ui-text-quaternary) text-center py-4', children: 'No sessions' })
           : jsxs('table', {
               className: 'w-full border-collapse',
@@ -347,25 +454,36 @@ function TokenPane() {
                       jsx('th', { className: 'text-right py-1 px-2 font-normal', title: 'Cached input tokens', children: '⚡' }),
                       jsx('th', { className: 'text-right py-1 px-2 font-normal', children: 'Out' }),
                       jsx('th', { className: 'text-right py-1 px-2 font-normal', title: 'Context window fill', children: '📊' }),
-                      jsx('th', { className: 'text-right py-1 pl-2 font-normal', children: 'Total' }),
+                      jsx('th', { className: 'text-right py-1 px-2 font-normal', title: 'Estimated cost (client-side pricing table)', children: '💰' }),
                     ]})
                   ]
                 }),
                 jsx('tbody', {
-                  children: sessions.map(s => {
-                    const u = usageFor(s.id)
-                    const isFocused = s.id === focusedSid
-                    const total = u.total || 0
+                  children: rows.map(row => {
+                    const u = usageFor(row)
+                    const isFocused = row.id === focusedSid
                     const cached = u.cache_read || 0
+                    const cost = estimateCost({ ...u, input: u.input, cache_read: cached, output: u.output, model: u.model })
+                    // Per-model tooltip from persistent model rows (when present)
+                    const modelTip = row.modelRows.length
+                      ? '\nModelle: ' + row.modelRows
+                          .map(m => `${m.model}${m.task ? ' (' + m.task + ')' : ''}: in ${fmt(m.input_tokens)}, ⚡ ${fmt(m.cache_read_tokens)}, out ${fmt(m.output_tokens)}`)
+                          .join(' · ')
+                      : ''
                     return jsxs('tr', {
                       className: isFocused
                         ? 'bg-(--ui-accent)/10 border-l-2 border-(--ui-accent)'
                         : 'border-b border-(--ui-stroke-secondary)/50',
                       children: [
-                        jsx('td', {
+                        jsxs('td', {
                           className: 'py-1 pr-2 max-w-[120px] truncate',
-                          title: s.title || s.id,
-                          children: s.title || s.id.slice(0, 12)
+                          title: (row.title || row.id) + (row.lastActive ? ` (${fmtDate(row.lastActive)})` : '') + modelTip,
+                          children: [
+                            row.isLiveOnly
+                              ? jsx('span', { className: 'text-(--ui-text-quaternary) mr-1', title: 'Live-Session (noch nicht persistent erfasst)', children: '●' })
+                              : null,
+                            row.title || row.id.slice(0, 12),
+                          ]
                         }),
                         jsx('td', { className: 'text-right py-1 px-2 tabular-nums text-(--ui-text-secondary)', children: fmt(u.input || 0) }),
                         jsx('td', {
@@ -394,9 +512,17 @@ function TokenPane() {
                               })
                             : jsx('span', { className: 'text-(--ui-text-quaternary)', children: '—' }),
                         }),
-                        jsx('td', { className: 'text-right py-1 pl-2 tabular-nums font-medium', children: fmt(total) }),
+                        jsx('td', {
+                          className: 'text-right py-1 px-2 tabular-nums text-(--ui-text-quaternary)',
+                          title: cost != null
+                            ? `Geschätzt: ${(cost * EUR_RATE).toFixed(2)} € (USD ${cost.toFixed(4)})${modelTip}`
+                            : 'Kein Preis für ' + (u.model || 'dieses Modell'),
+                          children: cost != null
+                            ? (cost * EUR_RATE).toFixed(2) + ' €'
+                            : jsx('span', { className: 'text-(--ui-text-quaternary)', children: '—' }),
+                        }),
                       ]
-                    }, s.id)
+                    }, row.id)
                   })
                 })
               ]
