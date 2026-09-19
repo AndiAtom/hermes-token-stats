@@ -40,16 +40,37 @@ Then in the app: ⌘K → **Reload desktop plugins**.
 
 `cost_usd` never arrives from the gateway for `custom:` providers
 (`billing_mode=unknown`, `estimated_cost_usd` stays 0.0), so the plugin prices
-locally in a labeled `PRICES` map (USD per 1M tokens):
+locally in a labeled `PRICES` map (USD per 1M tokens). Full coverage of all
+token-billed models on La Plateforme, cross-checked against the live
+`/v1/models` API (53 models, 2026-09-19):
 
-| Model | Input | Cached | Output |
-|---|---|---|---|
-| Z.ai GLM 5.3 / 5.2 (`zai-glm-latest`) | 1.40 | 0.14 | 4.40 |
-| Mistral Large 3 (`mistral-large-latest`) | 0.50 | 0.05 | 1.50 |
-| Mistral Medium 3.5 (`mistral-medium-latest`) | 1.50 | 0.15 | 7.50 |
-| Mistral Small 4 (`mistral-small-latest`) | 0.15 | 0.015 | 0.60 |
+| Family | Model | Input | Cached | Output |
+|---|---|---|---|---|
+| Premier | Mistral Large 3 (`mistral-large-latest`) | 0.50 | 0.05 | 1.50 |
+| | Mistral Medium 3.5 (`mistral-medium-latest`) | 1.50 | 0.15 | 7.50 |
+| | Mistral Small 4 (`mistral-small-latest`) | 0.15 | 0.015 | 0.60 |
+| Edge | Ministral 3 14B / 8B / 3B (`ministral-*-latest`) | 0.20 / 0.15 / 0.10 | 10% of input | = input |
+| Code | Codestral (`codestral-latest`) + `mistral-code-*` / `mistral-vibe-cli-*` | 0.30 | 0.03 | 0.90 |
+| Reasoning | Magistral Medium (`magistral-medium-latest`)¹ | 2.00 | 0.20 | 5.00 |
+| | Magistral Small (`magistral-small-latest`)¹ | 0.50 | 0.05 | 1.50 |
+| Audio | Voxtral Small (`voxtral-small-latest`)¹ | 0.10 | 0.01 | 0.30 |
+| Third-party | Z.ai GLM 5.3 / 5.2 (`zai-glm-latest`) | 1.40 | 0.14 | 4.40 |
+| Embeddings | Codestral Embed / Mistral Embed | 0.15 / 0.10 | 10% of input | — (input-only) |
+| Free | Leanstral 1.5, Mistral Moderation 2 | 0.00 | 0.00 | 0.00 |
 
-Verified against <https://docs.mistral.ai/inference/pricing> (2026-09-16).
+Fixed-version API aliases (e.g. `mistral-medium-2604`, `ministral-8b-2512`,
+`codestral-2508`, `zai-glm-5-3`) are priced identically to their `-latest`
+aliases — 39 entries total in `PRICES`.
+
+¹ *Magistral is deprecated on the API (replacements: Medium 3.5 / Small 4) —
+legacy list prices, no longer on the official page. Voxtral Small likewise
+removed from the page; last verified list price (Sep 2026).*
+
+**Not priced** (non-token billing, `estimateCost()` → `null` → pane shows `—`):
+Voxtral Mini Transcribe ($/min), Voxtral TTS ($/M chars), Mistral OCR ($/1000
+pages). Devstral was fully retired from the API and is absent.
+
+Verified against <https://docs.mistral.ai/inference/pricing> (2026-09-19).
 The gateway's `input` already **excludes** cached tokens
 (`input = prompt_total − cache_read − cache_write`), so the estimate is
 `input×in + cache_read×cached + output×out`, EUR = USD × 0.85
