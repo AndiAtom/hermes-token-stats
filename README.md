@@ -24,6 +24,12 @@ counts, cache read, context fill and totals, plus a grand aggregate summary.
 Seeded from `session.info` events, kept live via `session.usage` /
 `message.complete`.
 
+![Pane example with persistent history, aggregate summary and focused-session highlight](docs/pane-example.png)
+
+*Example rendering with sample data — focused session highlighted with the
+accent left border, `●` marks a live-only session, `≈` on the total indicates
+unpriced rows excluded, `—` marks missing values (unpriced model / no cache).*
+
 ## Install
 
 ```bash
