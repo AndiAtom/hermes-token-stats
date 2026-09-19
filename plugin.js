@@ -81,18 +81,58 @@ function toggleShow(key) {
 // custom providers (billing_mode=unknown), so we price locally. Extend the
 // table when switching models. Cache reads are billed instead of full input.
 const PRICES = {
-  // Third-party hosted on La Plateforme (docs.mistral.ai/inference/pricing, verified 2026-09-16)
-  'zai-glm-latest': { input: 1.40, cached: 0.14, output: 4.40 },  // Z.ai GLM 5.3/5.2 alias
-  'glm-5-2': { input: 1.40, cached: 0.14, output: 4.40 },
-  'zai-glm-5-2': { input: 1.40, cached: 0.14, output: 4.40 },
-  // Flagship models (official pricing page)
+  // ── Premier frontier (docs.mistral.ai/inference/pricing, verified 2026-09-19) ──
   'mistral-large-latest': { input: 0.50, cached: 0.05, output: 1.50 },    // Mistral Large 3
   'mistral-large-2512': { input: 0.50, cached: 0.05, output: 1.50 },
   'mistral-medium-latest': { input: 1.50, cached: 0.15, output: 7.50 },   // Mistral Medium 3.5
   'mistral-medium-2604': { input: 1.50, cached: 0.15, output: 7.50 },
   'mistral-medium-3-5': { input: 1.50, cached: 0.15, output: 7.50 },
+  'mistral-medium-3.5': { input: 1.50, cached: 0.15, output: 7.50 },
+  'mistral-medium': { input: 1.50, cached: 0.15, output: 7.50 },          // alias → 3.5
+  'mistral-medium-3': { input: 0.40, cached: 0.04, output: 2.00 },         // Medium 3 legacy tier
   'mistral-small-latest': { input: 0.15, cached: 0.015, output: 0.60 },   // Mistral Small 4
   'mistral-small-2603': { input: 0.15, cached: 0.015, output: 0.60 },
+  // ── Ministral 3 (official pricing page) ──
+  'ministral-14b-latest': { input: 0.20, cached: 0.02, output: 0.20 },
+  'ministral-14b-2512': { input: 0.20, cached: 0.02, output: 0.20 },
+  'ministral-8b-latest': { input: 0.15, cached: 0.015, output: 0.15 },
+  'ministral-8b-2512': { input: 0.15, cached: 0.015, output: 0.15 },
+  'ministral-3b-latest': { input: 0.10, cached: 0.01, output: 0.10 },
+  'ministral-3b-2512': { input: 0.10, cached: 0.01, output: 0.10 },
+  // ── Codestral (official pricing page) ──
+  'codestral-latest': { input: 0.30, cached: 0.03, output: 0.90 },
+  'codestral-2508': { input: 0.30, cached: 0.03, output: 0.90 },
+  'mistral-code-latest': { input: 0.30, cached: 0.03, output: 0.90 },     // Devstral-2-based
+  'mistral-code-fim-latest': { input: 0.30, cached: 0.03, output: 0.90 }, // Codestral FIM
+  'mistral-vibe-cli-latest': { input: 0.30, cached: 0.03, output: 0.90 }, // Devstral-2-based
+  'mistral-vibe-cli-fast': { input: 0.30, cached: 0.03, output: 0.90 },
+  'mistral-vibe-cli-with-tools': { input: 0.30, cached: 0.03, output: 0.90 },
+  // ── Magistral (deprecated but live on the API; legacy list prices,
+  //    no longer on the pricing page. Cache = 10% input, Mistral pattern) ──
+  'magistral-medium-latest': { input: 2.00, cached: 0.20, output: 5.00 },
+  'magistral-small-latest': { input: 0.50, cached: 0.05, output: 1.50 },
+  // ── Third-party hosted on La Plateforme (official pricing page) ──
+  'zai-glm-latest': { input: 1.40, cached: 0.14, output: 4.40 },  // Z.ai GLM 5.3/5.2 alias
+  'zai-glm-5-3': { input: 1.40, cached: 0.14, output: 4.40 },
+  'zai-glm-5-2': { input: 1.40, cached: 0.14, output: 4.40 },
+  'zai-glm-5': { input: 1.40, cached: 0.14, output: 4.40 },      // API alias, same listing
+  'glm-5-2': { input: 1.40, cached: 0.14, output: 4.40 },
+  // Voxtral Small (audio→text, token-priced; legacy list, secondary source Sep 2026 —
+  // no longer on the official pricing page)
+  'voxtral-small-latest': { input: 0.10, cached: 0.01, output: 0.30 },
+  'voxtral-small-2507': { input: 0.10, cached: 0.01, output: 0.30 },
+  // Embeddings: input-only, per 1M tokens (output n/a)
+  'codestral-embed': { input: 0.15, cached: 0.015, output: 0.00 },
+  'codestral-embed-2505': { input: 0.15, cached: 0.015, output: 0.00 },
+  'mistral-embed': { input: 0.10, cached: 0.01, output: 0.00 },   // legacy list price
+  'mistral-embed-2312': { input: 0.10, cached: 0.01, output: 0.00 },
+  // ── Free / research (API returns usage but costs 0) ──
+  'labs-leanstral-1-5': { input: 0.00, cached: 0.00, output: 0.00 },
+  'labs-leanstral-1-5-1': { input: 0.00, cached: 0.00, output: 0.00 },
+  'mistral-moderation-2603': { input: 0.00, cached: 0.00, output: 0.00 },
+  // NOT priced here (non-token billing, can't map to token usage):
+  //   voxtral-mini-* / *-transcribe-* ($/min), voxtral-mini-tts-* ($/M chars),
+  //   mistral-ocr-* ($/1000 pages). estimateCost() returns null → pane shows '—'.
 }
 
 // USD → EUR conversion factor (Mistral La Plateforme lists GLM 5.2 at
