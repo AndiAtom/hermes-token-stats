@@ -24,6 +24,12 @@ counts, cache read, context fill and totals, plus a grand aggregate summary.
 Seeded from `session.info` events, kept live via `session.usage` /
 `message.complete`.
 
+**Drag-resizable columns (v3.9)**: grab the right edge of any header cell
+(except the last) and drag — the neighbor column gives/takes the space, widths
+are percentage-based (sum always 100%, min 5% per column), and the aggregate
+summary row stays column-aligned. Your widths persist across app restarts via
+`ctx.storage` (`hermes.plugin.token-stats.colWidths`).
+
 ![Pane example with persistent history, aggregate summary and focused-session highlight](docs/pane-example.png)
 
 *Example rendering with sample data — focused session highlighted with the
@@ -31,6 +37,15 @@ accent left border, `●` marks a live-only session, `≈` on the total indicate
 unpriced rows excluded, `—` marks missing values (unpriced model / no cache).*
 
 ## Install
+
+**Requires the companion gateway module**
+[hermes-usage-history-rpc](https://github.com/AndiAtom/hermes-usage-history-rpc):
+the pane's persistent history (sessions from other clients, pre-restart
+sessions, the aggregate summary) is fed by the custom `usage.history` /
+`usage.totals` JSON-RPC methods that module adds to the gateway. Without it
+the plugin runs, but the pane degrades to live-only sessions (marked
+`live only`) and the chip shows no DB fallback for old sessions. Install it
+FIRST on the machine running the gateway/dashboard service, then:
 
 ```bash
 mkdir -p ~/.hermes/desktop-plugins/token-stats
