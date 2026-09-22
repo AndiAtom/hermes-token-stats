@@ -181,6 +181,11 @@ const PRICES = {
   'zai-glm-5-2': { input: 1.40, cached: 0.14, output: 4.40 },
   'zai-glm-5': { input: 1.40, cached: 0.14, output: 4.40 },      // API alias, same listing
   'glm-5-2': { input: 1.40, cached: 0.14, output: 4.40 },
+  // OpenRouter-routed (api.openrouter.ai, verified 2026-09-22; prompt/completion
+  // per token x1e6, input_cache_read as cached; no cache-write line → not billed
+  // separately in the plugin's estimate):
+  'z-ai/glm-5.3': { input: 0.84, cached: 0.156, output: 2.64 },
+  'openai/gpt-6-astra-pro': { input: 10.00, cached: 1.00, output: 50.00 },
   // Voxtral Small (audio→text, token-priced; legacy list, secondary source Sep 2026 —
   // no longer on the official pricing page)
   'voxtral-small-latest': { input: 0.10, cached: 0.01, output: 0.30 },
@@ -194,6 +199,7 @@ const PRICES = {
   'labs-leanstral-1-5': { input: 0.00, cached: 0.00, output: 0.00 },
   'labs-leanstral-1-5-1': { input: 0.00, cached: 0.00, output: 0.00 },
   'mistral-moderation-2603': { input: 0.00, cached: 0.00, output: 0.00 },
+  'stepfun/step-3.7-flash:free': { input: 0.00, cached: 0.00, output: 0.00 },  // OpenRouter free tier
   // NOT priced here (non-token billing, can't map to token usage):
   //   voxtral-mini-* / *-transcribe-* ($/min), voxtral-mini-tts-* ($/M chars),
   //   mistral-ocr-* ($/1000 pages). estimateCost() returns null → pane shows '—'.
