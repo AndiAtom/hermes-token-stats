@@ -9,9 +9,9 @@ Hermes Desktop plugin: statusbar chip + pane for per-session token usage.
 **Statusbar chip** (live readout of the focused session):
 - 🪙 **Tokens** — session lifetime total (input/cached/output in tooltip)
 - ⚡ **Cache** — prompt-cache hit rate (from `cache_read` / prompt tokens)
-- 📊 **Kontext** — context window fill % (amber ≥75%, red ≥90%), merged from
+- 📊 **Context** — context window fill % (amber ≥75%, red ≥90%), merged from
   `session.context_breakdown` RPC so resumed sessions show a value too
-- 💰 **Kosten** — client-side EUR estimate (USD table × 0.85), 2 decimals;
+- 💰 **Cost** — client-side EUR estimate (USD table × 0.85), 2 decimals;
   `null` (no display) for unpriced models — never a fabricated number
 - 🔁 **API-Calls** — lifetime provider request count
 

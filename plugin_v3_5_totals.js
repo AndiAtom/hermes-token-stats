@@ -56,8 +56,8 @@ const SHOW_KEYS = ['tokens', 'cache', 'context', 'cost', 'calls']
 const SHOW_LABELS = {
   tokens: '🪙 Tokens',
   cache: '⚡ Cache',
-  context: '📊 Kontext',
-  cost: '💰 Kosten',
+  context: '📊 Context',
+  cost: '💰 Cost',
   calls: '🔁 API-Calls',
 }
 const DEFAULT_SHOW = { tokens: true, cache: true, context: true, cost: false, calls: false }
@@ -152,7 +152,7 @@ function ChipMenu() {
     // stopPropagation so the chip's own onClick doesn't re-toggle the menu
     onClick: (e) => { e.stopPropagation() },
     children: [
-      jsx('div', { className: 'px-2 py-1 text-[0.625rem] uppercase text-(--ui-text-quaternary)', children: 'Anzeige' }),
+      jsx('div', { className: 'px-2 py-1 text-[0.625rem] uppercase text-(--ui-text-quaternary)', children: 'Display' }),
       ...SHOW_KEYS.map(key => jsxs('button', {
         type: 'button',
         className: 'flex items-center justify-between gap-2 px-2 py-1 rounded-sm hover:bg-(--ui-stroke-secondary) text-left text-(--ui-text-secondary) cursor-pointer w-full',
@@ -263,9 +263,9 @@ function TokenChip() {
       jsxs('button', {
         type: 'button',
         className: 'inline-flex h-full items-center gap-1.5 px-1.5 text-[0.6875rem] text-(--ui-text-tertiary) tabular-nums cursor-pointer hover:text-(--ui-text-secondary)',
-        title: `Token Stats v3.5 · Klick: Anzeige konfigurieren${isPersisted ? ' · 📚 DB-Werte (keine Live-Session)' : ''}\n\nInput: ${fmtFull(input)} · Cached: ${fmtFull(cached)}${hitPct != null ? ` (${hitPct}%)` : ''} · Output: ${fmtFull(out)} · Total: ${fmtFull(total)}`
+        title: `Token Stats v3.5 · Klick: Anzeige konfigurieren${isPersisted ? ' · 📚 DB values (not a live session)' : ''}\n\nInput: ${fmtFull(input)} · Cached: ${fmtFull(cached)}${hitPct != null ? ` (${hitPct}%)` : ''} · Output: ${fmtFull(out)} · Total: ${fmtFull(total)}`
           + (ctxPct != null && ctxMax > 0 ? `\nContext: ${fmtFull(ctxUsed)} / ${fmtFull(ctxMax)} tokens (${ctxPct}%)` : '')
-          + (cost != null ? `\nKosten: ${(cost * EUR_RATE).toFixed(2)} €` : '')
+          + (cost != null ? `\nCost: ${(cost * EUR_RATE).toFixed(2)} €` : '')
           + (calls > 0 ? `\nAPI calls: ${fmtFull(calls)}` : ''),
         onClick: (e) => { e.stopPropagation(); menuOpenMap.set(!menuOpen) },
         children: [
@@ -303,7 +303,7 @@ function TokenChip() {
           show.cost && cost != null
             ? jsxs('span', {
                 className: 'ml-1 text-(--ui-text-quaternary)',
-                title: `Geschätzte Kosten: ${(cost * EUR_RATE).toFixed(2)} € (USD ${cost.toFixed(4)})`,
+                title: `Estimated cost: ${(cost * EUR_RATE).toFixed(2)} € (USD ${cost.toFixed(4)})`,
                 children: ['💰', (cost * EUR_RATE).toFixed(2), ' €'],
               })
             : null,
@@ -468,7 +468,7 @@ function TokenPane() {
             histOk === false
               ? jsx('span', {
                   className: 'text-[0.625rem] text-amber-500',
-                  title: 'usage.history RPC nicht verfügbar — nur Live-Sessions sichtbar.\nGateway-Modul: /root/Private/hermes-usage-history-rpc',
+                  title: 'usage.history RPC unavailable — live sessions only.\nGateway module: /root/Private/hermes-usage-history-rpc',
                   children: 'live only' })
               : null,
             ...[7, 30, 0].map(d => jsx('button', {
@@ -494,7 +494,7 @@ function TokenPane() {
             jsx('tbody', {
               children: [
                 jsxs('tr', { className: 'text-(--ui-text-quaternary) text-[0.625rem] uppercase', children: [
-                  jsx('td', { className: 'w-[38%]', children: 'Gesamt' }),
+                  jsx('td', { className: 'w-[38%]', children: 'Total' }),
                   jsx('td', { className: 'text-right px-1 w-[13%] tabular-nums font-medium', children: fmt(grandInput) }),
                   jsx('td', {
                     className: 'text-right px-1 w-[13%] tabular-nums font-medium text-(--ui-accent)',
@@ -507,7 +507,7 @@ function TokenPane() {
                   jsx('td', {
                     className: 'text-right pl-1 w-[14%] tabular-nums font-medium',
                     title: grandCost > 0
-                      ? `Geschätzt: ${(grandCost * EUR_RATE).toFixed(2)} € (USD ${grandCost.toFixed(2)})${unpricedRows > 0 ? ` — ${unpricedRows} Session(s) ohne Preis ausgeschlossen` : ''}`
+                      ? `Estimated: ${(grandCost * EUR_RATE).toFixed(2)} € (USD ${grandCost.toFixed(2)})${unpricedRows > 0 ? ` — ${unpricedRows} unpriced session(s) excluded` : ''}`
                       : undefined,
                     children: grandCost > 0
                       ? `${unpricedRows > 0 ? '≈ ' : ''}${(grandCost * EUR_RATE).toFixed(2)} €`
@@ -562,7 +562,7 @@ function TokenPane() {
                           title: (row.title || row.id) + (row.lastActive ? ` (${fmtDate(row.lastActive)})` : '') + modelTip,
                           children: [
                             row.isLiveOnly
-                              ? jsx('span', { className: 'text-(--ui-text-quaternary) mr-1', title: 'Live-Session (noch nicht persistent erfasst)', children: '●' })
+                              ? jsx('span', { className: 'text-(--ui-text-quaternary) mr-1', title: 'Live session (not yet persisted)', children: '●' })
                               : null,
                             row.title || row.id.slice(0, 12),
                           ]
@@ -597,8 +597,8 @@ function TokenPane() {
                         jsx('td', {
                           className: 'text-right py-1 pl-1 tabular-nums text-(--ui-text-quaternary)',
                           title: cost != null
-                            ? `Geschätzt: ${(cost * EUR_RATE).toFixed(2)} € (USD ${cost.toFixed(4)})${modelTip}`
-                            : 'Kein Preis für ' + (u.model || 'dieses Modell'),
+                            ? `Estimated: ${(cost * EUR_RATE).toFixed(2)} € (USD ${cost.toFixed(4)})${modelTip}`
+                            : 'No price for ' + (u.model || 'this model'),
                           children: cost != null
                             ? (cost * EUR_RATE).toFixed(2) + ' €'
                             : jsx('span', { className: 'text-(--ui-text-quaternary)', children: '—' }),
