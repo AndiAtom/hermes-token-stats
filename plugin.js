@@ -182,10 +182,12 @@ const PRICES = {
   'zai-glm-5': { input: 1.40, cached: 0.14, output: 4.40 },      // API alias, same listing
   'glm-5-2': { input: 1.40, cached: 0.14, output: 4.40 },
   // Nous Inference API (inference-api.nousresearch.com) serves OpenRouter-style
-  // model IDs; prices are OpenRouter list prices as best estimate (verified
-  // 2026-09-22; prompt/completion per token x1e6, input_cache_read as cached):
-  'z-ai/glm-5.3': { input: 0.84, cached: 0.156, output: 2.64 },
-  'openai/gpt-6-astra-pro': { input: 10.00, cached: 1.00, output: 50.00 },
+  // model IDs. Andi decision 2026-09-30: price with MISTRAL's own list prices,
+  // not OpenRouter's. Where Mistral hosts the same model, use its La Plateforme
+  // price (docs.mistral.ai/inference/pricing, verified 2026-09-30); models
+  // Mistral does NOT host stay unpriced ('—', never fabricate a number):
+  'z-ai/glm-5.3': { input: 1.40, cached: 0.14, output: 4.40 },  // = Z.ai GLM 5.3 hosted on La Plateforme
+  // 'openai/gpt-6-astra-pro': not hosted by Mistral → no Mistral price → unpriced ('—').
   // Voxtral Small (audio→text, token-priced; legacy list, secondary source Sep 2026 —
   // no longer on the official pricing page)
   'voxtral-small-latest': { input: 0.10, cached: 0.01, output: 0.30 },
