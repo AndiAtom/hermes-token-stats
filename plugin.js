@@ -12,6 +12,7 @@
  */
 
 import { host, useValue, useQuery, atom } from '@hermes/plugin-sdk'
+import { useEffect, useState } from 'react'
 import { jsx, jsxs } from 'react/jsx-runtime'
 
 const ID = 'token-stats'
@@ -255,6 +256,26 @@ function mergeUsage(sid, usage) {
 // History window for the pane (days): 7, 30, or 0 = all time.
 const historyDays = atom(30)
 
+// ctx.rest handle — set once in register(ctx); null = backend unavailable
+// (plugin not loaded yet, OAuth remote → ctx.rest is a no-op there).
+let restApi = null
+
+// Ledger backend: fetch known (monotonic) data via ctx.rest. Returns
+// null when the backend is unreachable → caller falls back to the
+// usage.history RPC. ctx.rest throws/errors on: backend not enabled,
+// remote OAuth host, gateway without plugin support.
+async function fetchLedger(params) {
+  if (!restApi) return null
+  try {
+    const q = Object.entries(params)
+      .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+      .join('&')
+    return await restApi(`/ledger${q ? '?' + q : ''}`)
+  } catch (e) {
+    return null
+  }
+}
+
 // ── Chip menu (popover) ─────────────────────────────────────────────
 
 function ChipMenu() {
@@ -283,14 +304,22 @@ function ChipMenu() {
 
 // Persistent fallback for the chip: when the focused session has no live
 // usage yet (old/resumed session, agent not loaded), fetch its totals
-// from state.db via usage.history deep-dive. Runs only when needed.
+// from the KNOWN-LEDGER backend (monotonic, compression-safe). Falls back
+// to the legacy usage.history deep-dive when the backend is unavailable.
+// Runs only when needed.
 function usePersistedUsage(enabled, sid) {
   const query = useQuery({
-    queryKey: [ID, 'persisted', sid],
+    queryKey: [ID, 'known', sid],
     queryFn: async () => {
+      // 1st choice: known-ledger backend (ctx.rest namespace)
+      const led = await fetchLedger({ session_id: sid, days: 0, limit: 1 })
+      if (led && Array.isArray(led.sessions) && led.sessions.length) {
+        return { ok: true, res: led, source: 'ledger' }
+      }
+      // 2nd choice: legacy usage.history RPC (old gateway / OAuth remote)
       try {
         const res = await host.request('usage.history', { session_id: sid, models: true })
-        return { ok: true, res }
+        return { ok: true, res, source: 'rpc' }
       } catch (e) {
         return { ok: false, error: String(e && e.message ? e.message : e) }
       }
@@ -439,20 +468,27 @@ function TokenChip() {
 }
 
 // ── Pane ───────────────────────────────────────────────────────────
-// Data model: the pane is backed by PERSISTENT gateway data (usage.history
-// RPC → state.db) so sessions from other clients and pre-restart sessions
-// show real numbers. Live session.usage events overlay the focused session.
-// When usage.history is unavailable (older gateway), the pane falls back to
-// the legacy live-event map only and marks itself "live only".
+// Data model: the pane is backed by the KNOWN-LEDGER backend (monotonic
+// known counters per session — compression/rewind-safe, delivered via
+// ctx.rest from the token-stats plugin_api.py). Live session.usage events
+// overlay the focused session. Fallback chain: legacy usage.history RPC
+// (old gateway, OAuth remote) → live-event map only ("live only").
+// Anomalies (DB resets) are flagged per session via /events (⚠ DB-Reset).
 
 function HistoryQuery(days) {
-  // Persistent per-session totals + per-model rows from state.db.
+  // Monotonic per-session totals + per-model rows from the ledger.
   return useQuery({
-    queryKey: [ID, 'usageHistory', days],
+    queryKey: [ID, 'knownHistory', days],
     queryFn: async () => {
+      // 1st choice: known-ledger backend (ctx.rest namespace)
+      const led = await fetchLedger({ days, limit: 200 })
+      if (led && Array.isArray(led.sessions)) {
+        return { ok: true, res: led, source: 'ledger' }
+      }
+      // 2nd choice: legacy usage.history RPC
       try {
         const res = await host.request('usage.history', { days, limit: 200, models: true })
-        return { ok: true, res }
+        return { ok: true, res, source: 'rpc' }
       } catch (e) {
         return { ok: false, error: String(e && e.message ? e.message : e) }
       }
@@ -466,6 +502,40 @@ function fmtDate(ts) {
   if (!ts) return ''
   const d = new Date(ts * 1000)
   return d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })
+}
+
+// Anomaly lookup: polls /events per session (once, cached by queryKey) and
+// returns a Set of session IDs that have at least one decrease event.
+// Only runs against the ledger backend; empty Set on fallback/legacy.
+function useAnomalies(sids) {
+  const [cache, setCache] = useState({})
+
+  useEffect(() => {
+    if (!restApi) return
+    let cancelled = false
+    ;(async () => {
+      const next = {}
+      for (const sid of sids) {
+        if (sid in cache) { next[sid] = cache[sid]; continue }
+        try {
+          const q = `session_id=${encodeURIComponent(sid)}&limit=10`
+          const ev = await restApi(`/events?${q}`)
+          next[sid] = Boolean(ev && Array.isArray(ev.events)
+            && ev.events.some(e => e.kind === 'decrease'))
+        } catch (e) {
+          next[sid] = false
+        }
+      }
+      if (!cancelled) setCache(next)
+    })()
+    return () => { cancelled = true }
+    // sids identity changes every render; depend on a stable join instead
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sids.join(',')])
+
+  const out = new Set()
+  for (const [sid, bad] of Object.entries(cache)) if (bad) out.add(sid)
+  return out
 }
 
 function TokenPane() {
@@ -493,6 +563,11 @@ function TokenPane() {
     refetchInterval: 10_000,
   })
 
+  // Anomaly flags: fetched once per session ID (not per cell). A session
+  // with a decrease event (DB reset/rewind) shows a ⚠ marker in the pane.
+  const anomalySids = useAnomalies(histOk && hist.data.source === 'ledger'
+    ? histSessions.map(s => s.id) : [])
+
   // Build the unified row set: persistent rows first (source of truth),
   // then any live session not yet in the history window appended live-only.
   const sessionTitles = {}
@@ -502,15 +577,29 @@ function TokenPane() {
   const seenIds = new Set()
   for (const h of histSessions) {
     const live = allUsage[h.id]
-    // Live in-memory values are the freshest for a running session; persistent
-    // row values are flushed periodically. Merge: persistent base, live wins.
+    // Live in-memory values are the freshest for a RUNNING session; the
+    // ledger's known values are the monotonic floor. Merge per field:
+    // max(known, live) — a live compression reset must never hide tokens
+    // the ledger already knows (same semantics as the chip merge).
     const u = live
-      ? { ...h, ...live, model: h.model || live.model }
+      ? {
+          ...h,
+          input_tokens: Math.max(h.input_tokens || 0, Number(live.input) || 0),
+          cache_read_tokens: Math.max(h.cache_read_tokens || 0, Number(live.cache_read) || 0),
+          output_tokens: Math.max(h.output_tokens || 0, Number(live.output) || 0),
+          model: h.model || live.model,
+          context_percent: live.context_percent,
+          context_used: live.context_used,
+          context_max: live.context_max,
+          context_estimated: live.context_estimated,
+          cache_hit_pct: live.cache_hit_pct,
+        }
       : h
     rows.push({
       id: h.id,
       title: sessionTitles[h.id] || h.title || h.id.slice(0, 12),
       isLiveOnly: false,
+      hadReset: anomalySids.has(h.id),
       lastActive: h.last_active,
       modelRows: modelRowsBySid[h.id] || [],
       u: {
@@ -581,7 +670,7 @@ function TokenPane() {
             histOk === false
               ? jsx('span', {
                   className: 'text-[0.625rem] text-amber-500',
-                  title: 'usage.history RPC unavailable — live sessions only.\nGateway module: /root/Private/hermes-usage-history-rpc',
+                  title: 'Ledger backend AND usage.history RPC unavailable — live sessions only.\nBackend: /root/.hermes/plugins/token-stats/ (plugin_api.py) + daemon: systemctl status token-stats-ledger',
                   children: 'live only' })
               : null,
             ...[1, 7, 30, 0].map(d => jsx('button', {
@@ -619,8 +708,8 @@ function TokenPane() {
                   jsx('td', {
                     className: 'text-right pl-1 tabular-nums font-medium', style: { width: W[4] + '%' },
                     title: grandCost > 0
-                      ? `Estimated: ${(grandCost * EUR_RATE).toFixed(2)} € (USD ${grandCost.toFixed(2)})${unpricedRows > 0 ? ` — ${unpricedRows} unpriced session(s) excluded` : ''}`
-                      : undefined,
+                      ? `Known-Ledger, monoton · Estimated: ${(grandCost * EUR_RATE).toFixed(2)} € (USD ${grandCost.toFixed(2)})${unpricedRows > 0 ? ` — ${unpricedRows} unpriced session(s) excluded` : ''}`
+                      : 'Known-Ledger, monoton',
                     children: grandCost > 0
                       ? `${unpricedRows > 0 ? '≈ ' : ''}${(grandCost * EUR_RATE).toFixed(2)} €`
                       : '—' }),
@@ -663,6 +752,9 @@ function TokenPane() {
                           .map(m => `${m.model}${m.task ? ' (' + m.task + ')' : ''}: in ${fmt(m.input_tokens)}, ⚡ ${fmt(m.cache_read_tokens)}, out ${fmt(m.output_tokens)}`)
                           .join(' · ')
                       : ''
+                    const resetTip = row.hadReset
+                      ? '\n⚠ DB-Reset erkannt — Werte aus dem Known-Ledger (monoton)'
+                      : ''
                     return jsxs('tr', {
                       className: isFocused
                         ? 'bg-(--ui-accent)/10 border-l-2 border-(--ui-accent)'
@@ -670,8 +762,11 @@ function TokenPane() {
                       children: [
                         jsxs('td', {
                           className: 'py-1 pr-2 truncate',
-                          title: (row.title || row.id) + (row.lastActive ? ` (${fmtDate(row.lastActive)})` : '') + modelTip,
+                          title: (row.title || row.id) + (row.lastActive ? ` (${fmtDate(row.lastActive)})` : '') + resetTip + modelTip,
                           children: [
+                            row.hadReset
+                              ? jsx('span', { className: 'text-amber-500 mr-1', title: 'DB-Reset/Anomalie im Ledger verzeichnet — known-Werte bleiben monoton', children: '⚠' })
+                              : null,
                             row.isLiveOnly
                               ? jsx('span', { className: 'text-(--ui-text-quaternary) mr-1', title: 'Live session (not yet persisted)', children: '●' })
                               : null,
@@ -715,6 +810,12 @@ export default {
   id: ID,
   name: 'Token Stats',
   register(ctx) {
+    // Known-ledger backend handle (namespace /api/plugins/token-stats/ —
+    // our own ID, so ctx.rest can reach it). Null-safe: fetchLedger falls
+    // back to the usage.history RPC when this is unset or errors (OAuth
+    // remotes resolve ctx.rest to a no-op).
+    restApi = (path, opts) => ctx.rest(path, opts)
+
     // Load persisted chip visibility (sync seed before first render)
     const saved = ctx.storage.get('chipShow', null)
     if (saved && typeof saved === 'object') {
