@@ -40,12 +40,13 @@ unpriced rows excluded, `—` marks missing values (unpriced model / no cache).*
 
 **Requires the companion gateway module**
 [hermes-usage-history-rpc](https://github.com/AndiAtom/hermes-usage-history-rpc):
-the pane's persistent history (sessions from other clients, pre-restart
-sessions, the aggregate summary) is fed by the custom `usage.history` /
-`usage.totals` JSON-RPC methods that module adds to the gateway. Without it
-the plugin runs, but the pane degrades to live-only sessions (marked
-`live only`) and the chip shows no DB fallback for old sessions. Install it
-FIRST on the machine running the gateway/dashboard service, then:
+it ships the **known-ledger backend** (daemon + plugin backend under
+`/api/plugins/token-stats/`) AND the legacy `usage.history` / `usage.totals`
+JSON-RPC methods. The plugin prefers the ledger backend (monotonic,
+compression-safe counters via `ctx.rest`); without it the pane falls back to
+the RPC (plain state.db values); without both it degrades to live-only
+sessions (marked `live only`). Install the companion FIRST on the machine
+running the gateway/dashboard service, then:
 
 ```bash
 mkdir -p ~/.hermes/desktop-plugins/token-stats
@@ -56,6 +57,26 @@ Then in the app: ⌘K → **Reload desktop plugins**.
 
 > The app loads plugins from ITS OWN disk — editing a copy on a remote gateway
 > host does nothing for a desktop running on another machine.
+
+## Data flow (known / live / max)
+
+```
+token-stats-ledger daemon ──15s read-only poll──▶ ~/.hermes/state.db
+        │  delta engine: known = monotonic, never drops
+        ▼
+/root/token-stats-ledger/<profile>/ledger.db
+        │  plugin backend (ctx.rest namespace /api/plugins/token-stats/)
+        ▼
+plugin.js  ├─ Chip:  known (usePersistedUsage) ──┐
+           │                                       ├─ max(live, known) per field
+           ├─ Pane:  known (HistoryQuery)          │
+           └─ Live overlay: session.usage events ──┘
+Fallback chain per query: ctx.rest ledger → usage.history RPC → live only
+```
+
+`known` counters survive compression resets and rewinds (the ledger
+re-baselines instead of dropping); the ⚠ marker in the pane flags sessions
+with a recorded DB-reset anomaly.
 
 ## Pricing table
 
