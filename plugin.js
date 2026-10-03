@@ -952,24 +952,37 @@ function TokenPane() {
         ? jsx('div', {
             className: 'shrink-0',
             style: { marginTop: '-2px', paddingLeft: 8, paddingRight: 8 },
-            title: `Cache-Hit: ${Math.round(grandCached / (grandInput + grandCached) * 100)}% — ${fmt(grandCached)} von ${fmt(grandInput + grandCached)} Prompt-Tokens aus dem Cache`,
-            children: jsx('div', {
-              style: {
-                height: 3,
-                width: '100%',
-                borderRadius: 9999,
-                overflow: 'hidden',
-                background: 'var(--ui-stroke-secondary)',
-                display: 'flex',
-              },
-              children: jsx('div', {
-                style: {
-                  height: '100%',
-                  background: 'var(--ui-accent)',
-                  width: Math.min(100, grandCached / (grandInput + grandCached) * 100) + '%',
-                },
+            children: [
+              jsxs('div', {
+                className: 'flex items-center justify-between text-[0.625rem] text-(--ui-text-quaternary) mb-0.5',
+                children: [
+                  jsx('span', {
+                    title: `Anteil der Prompt-Tokens, die aus dem Prompt-Cache kamen (statt neu berechnet)`,
+                    children: '⚡ Cache-Hit' }),
+                  jsx('span', {
+                    className: 'tabular-nums',
+                    title: `${fmt(grandCached)} von ${fmt(grandInput + grandCached)} Prompt-Tokens aus dem Cache`,
+                    children: Math.round(grandCached / (grandInput + grandCached) * 100) + '%' }),
+                ],
               }),
-            }),
+              jsx('div', {
+                style: {
+                  height: 3,
+                  width: '100%',
+                  borderRadius: 9999,
+                  overflow: 'hidden',
+                  background: 'var(--ui-stroke-secondary)',
+                  display: 'flex',
+                },
+                children: jsx('div', {
+                  style: {
+                    height: '100%',
+                    background: 'var(--ui-accent)',
+                    width: Math.min(100, grandCached / (grandInput + grandCached) * 100) + '%',
+                  },
+                }),
+              }),
+            ],
           })
         : null,
       // Mini histogram: tokens per day over the active window.
