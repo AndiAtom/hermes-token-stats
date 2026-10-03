@@ -825,6 +825,10 @@ function TokenPane() {
   const curSort = useValue(sortBy)
   const curDir = useValue(sortDir)
   const dayCollapse = useValue(collapsedDays)
+  // Resolved collapse state: explicit override if set, else default
+  // (today expanded, every other day collapsed)
+  const todayKey = dayKeyDate(new Date())
+  const isDayCollapsed = (k) => (k in dayCollapse ? Boolean(dayCollapse[k]) : k !== todayKey)
   // Day keys in view (for the collapse-all toggle in the header)
   const dayKeys = []
   {
@@ -835,7 +839,7 @@ function TokenPane() {
       if (!seen.has(k)) { seen.add(k); dayKeys.push(k) }
     }
   }
-  const allDaysCollapsed = dayKeys.length > 0 && dayKeys.every(k => dayCollapse[k])
+  const allDaysCollapsed = dayKeys.length > 0 && dayKeys.every(k => isDayCollapsed(k))
   const sortedRows = (() => {
     if (curSort === 'activity') return rows // server order + day separators
     const val = SORTS[curSort].val
@@ -1036,7 +1040,7 @@ function TokenPane() {
                           lastDay = key
                           const a = dayAgg[key]
                           const daySessions = sortedRows.filter(r => r.lastActive != null && dayKeyTs(r.lastActive) === key).length
-                          const isCollapsed = Boolean(dayCollapse[key])
+                          const isCollapsed = isDayCollapsed(key)
                           out.push(jsxs('tr', {
                             className: 'text-[0.625rem] text-(--ui-text-quaternary) border-b border-(--ui-stroke-secondary)/50 cursor-pointer select-none',
                             onClick: () => toggleDayCollapse(key),
@@ -1067,7 +1071,7 @@ function TokenPane() {
                         }
                       }
                       // Skip session rows of collapsed day groups
-                      if (showDays && row.lastActive != null && dayCollapse[dayKeyTs(row.lastActive)]) continue
+                      if (showDays && row.lastActive != null && isDayCollapsed(dayKeyTs(row.lastActive))) continue
                       const u = usageFor(row)
                       const isFocused = row.id === focusedSid
                       const cached = u.cache_read || 0
