@@ -122,19 +122,33 @@ function startColDrag(e, i) {
 
 // Header cell with a drag handle on its right edge (all but the last column).
 // Reads the atom directly — TokenPane subscribes via useValue, so renders are
-// always fresh.
-function Th(i, className, children, title) {
+// always fresh. With a sortKey, the header also sorts: click toggles the
+// direction; a pointerdown on the resize handle suppresses the sort click.
+function Th(i, className, children, title, sortKey) {
   const W = colWidths.get()
+  const active = Boolean(sortKey) && sortBy.get() === sortKey
+  const dir = sortDir.get()
+  const arrow = active
+    ? jsx('span', { className: 'text-[0.5rem] leading-none', children: dir === 'asc' ? '▲' : '▼' })
+    : null
   return jsxs('th', {
-    className: className + ' relative',
+    className: className + ' relative' + (sortKey ? ' cursor-pointer select-none' : ''),
     style: { width: W[i] + '%' },
     title,
+    ...(sortKey
+      ? { onClick: () => {
+          if (sortSuppressClick) { sortSuppressClick = false; return }
+          onSortHeader(sortKey)
+        } }
+      : {}),
     children: [
-      children,
+      sortKey
+        ? jsxs('span', { className: 'inline-flex items-center gap-0.5', children: [children, arrow] })
+        : children,
       i < W.length - 1
         ? jsx('span', {
             className: 'absolute inset-y-0 right-0 w-[4px] cursor-col-resize z-20 hover:bg-(--ui-accent)/50',
-            onPointerDown: (e) => startColDrag(e, i),
+            onPointerDown: (e) => { sortSuppressClick = true; startColDrag(e, i) },
           })
         : null,
     ],
@@ -302,6 +316,101 @@ function windowFor(key) {
   return { since, until: 0, rollingDays: 7 } // full week, open-ended
 }
 
+// ── Pane sort state ─────────────────────────────────────────────────
+// Default: 'activity' desc (= server order, with day separators).
+// Clicking a column header sorts by it; clicking again flips direction.
+const sortBy = atom('activity') // activity | in | cached | out | cost
+const sortDir = atom('desc')
+
+const SORTS = {
+  activity: { dir: 'desc', val: r => (r.lastActive == null ? -Infinity : r.lastActive) },
+  in: { dir: 'desc', val: r => r.u.input || 0 },
+  cached: { dir: 'desc', val: r => r.u.cache_read || 0 },
+  out: { dir: 'desc', val: r => r.u.output || 0 },
+  cost: { dir: 'desc', val: r => r.cost != null ? r.cost : -Infinity },
+}
+
+function onSortHeader(key) {
+  if (sortBy.get() === key) {
+    sortDir.set(sortDir.get() === 'asc' ? 'desc' : 'asc')
+  } else {
+    sortBy.set(key)
+    sortDir.set(SORTS[key].dir)
+  }
+}
+
+// Suppress a sort toggle when the click was actually a column-drag
+// (pointerdown on the resize handle precedes the click event).
+let sortSuppressClick = false
+
+// ── Calendar-day helpers (local time) ───────────────────────────────
+function _pad(n) { return String(n).padStart(2, '0') }
+function dayKeyDate(d) {
+  return d.getFullYear() + '-' + _pad(d.getMonth() + 1) + '-' + _pad(d.getDate())
+}
+function dayKeyTs(ts) { return dayKeyDate(new Date(ts * 1000)) }
+
+// Label for a calendar-day key relative to today.
+function dayLabel(key) {
+  const now = new Date()
+  if (key === dayKeyDate(now)) return 'Heute'
+  if (key === dayKeyDate(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1))) return 'Gestern'
+  const [y, m, d] = key.split('-').map(Number)
+  return new Date(y, m - 1, d).toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' })
+}
+
+// Footer description of the active range preset's calendar window.
+function windowLabel(range) {
+  const win = windowFor(range)
+  if (!win.since) return 'Alle Zeit'
+  const since = new Date(win.since * 1000)
+  const f = d => d.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' })
+  if (range === 'day') return 'Heute'
+  if (range === 'workweek') return f(since) + ' – ' + f(new Date((win.until - 1) * 1000))
+  if (range === 'week') return 'ab ' + f(since)
+  return 'ab ' + since.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })
+}
+
+const EMPTY_MSG = {
+  day: 'Noch keine Sessions heute',
+  workweek: 'Keine Sessions in der Arbeitswoche (Mo–Fr)',
+  week: 'Keine Sessions in dieser Kalenderwoche',
+  month: 'Keine Sessions im laufenden Monat',
+  all: 'Noch keine Sessions im Ledger',
+}
+
+// Per-day token totals over the window, for the mini histogram. A
+// session's tokens are attributed to its last-active day (visual
+// estimate — exact per-day splits would need per-message data).
+// Live-only rows (no lastActive) count towards today. Capped at 30 bars.
+function buildHistogram(rows, range) {
+  const win = windowFor(range)
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+  const end = win.until
+    ? new Date(Math.min(today.getTime(), (win.until - 1) * 1000))
+    : today
+  const start = new Date(Math.max(
+    win.since ? win.since * 1000 : end - 29 * 86400000,
+    end - 29 * 86400000))
+  const buckets = []
+  const idx = {}
+  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+    const key = dayKeyDate(d)
+    if (key in idx) continue // DST edge: 86400s steps can repeat a local day
+    idx[key] = buckets.length
+    buckets.push({ key, tokens: 0, sessions: 0 })
+  }
+  const todayKey = dayKeyDate(new Date())
+  for (const r of rows) {
+    const key = r.lastActive != null ? dayKeyTs(r.lastActive) : todayKey
+    const i = idx[key]
+    if (i == null) continue
+    buckets[i].tokens += (r.u.input || 0) + (r.u.cache_read || 0) + (r.u.output || 0)
+    buckets[i].sessions++
+  }
+  return buckets
+}
+
 // ctx.rest handle — set once in register(ctx); null = backend unavailable
 // (plugin not loaded yet, OAuth remote → ctx.rest is a no-op there).
 let restApi = null
@@ -450,7 +559,7 @@ function TokenChip() {
       jsxs('button', {
         type: 'button',
         className: 'inline-flex h-full items-center gap-1.5 px-1.5 text-[0.6875rem] text-(--ui-text-tertiary) tabular-nums cursor-pointer hover:text-(--ui-text-secondary)',
-        title: `Token Stats v4.1 · Click: configure display · drag header edges to resize pane columns${isPersisted ? ' · 📚 Known-Ledger values (monotonic)' : ''}\n\nInput: ${fmtFull(input)} · Cached: ${fmtFull(cached)}${hitPct != null ? ` (${hitPct}%)` : ''} · Output: ${fmtFull(out)} · Total: ${fmtFull(total)}`
+        title: `Token Stats v4.2 · Click: configure display · drag header edges to resize pane columns${isPersisted ? ' · 📚 Known-Ledger values (monotonic)' : ''}\n\nInput: ${fmtFull(input)} · Cached: ${fmtFull(cached)}${hitPct != null ? ` (${hitPct}%)` : ''} · Output: ${fmtFull(out)} · Total: ${fmtFull(total)}`
           + (ctxPct != null && ctxMax > 0 ? `\nContext: ${fmtFull(ctxUsed)} / ${fmtFull(ctxMax)} tokens (${ctxPct}%)` : '')
           + (cost != null ? `\nCost: ${(cost * EUR_RATE).toFixed(2)} €` : '')
           + (calls > 0 ? `\nAPI calls: ${fmtFull(calls)}` : ''),
@@ -695,6 +804,25 @@ function TokenPane() {
     return row.u
   }
 
+  // Per-row cost (needed for the cost sort key; same estimate as the cell).
+  for (const r of rows) {
+    r.cost = estimateCost({ input: r.u.input, cache_read: r.u.cache_read, output: r.u.output, model: r.u.model })
+  }
+
+  // Sorted view (SORTS defaults = server's activity order).
+  const curSort = useValue(sortBy)
+  const curDir = useValue(sortDir)
+  const sortedRows = (() => {
+    if (curSort === 'activity') return rows // server order + day separators
+    const val = SORTS[curSort].val
+    const s = [...rows].sort((a, b) => val(a) - val(b))
+    return curDir === 'asc' ? s : s.reverse()
+  })()
+
+  // Mini-histogram scale: max daily token total in the window.
+  const histBuckets = buildHistogram(rows, range)
+  const histMax = histBuckets.reduce((m, b) => Math.max(m, b.tokens), 0)
+
   // Aggregate over the unified rows (persistent = all rows in window).
   const grandInput = rows.reduce((s, r) => s + (r.u.input || 0), 0)
   const grandCached = rows.reduce((s, r) => s + (r.u.cache_read || 0), 0)
@@ -770,12 +898,55 @@ function TokenPane() {
           ]
         })
       }),
+      // Cache-hit bar: visual share of cached vs. uncached prompt tokens
+      grandInput + grandCached > 0
+        ? jsx('div', {
+            className: 'shrink-0 -mt-1 px-2',
+            title: `Cache-Hit: ${Math.round(grandCached / (grandInput + grandCached) * 100)}% — ${fmt(grandCached)} von ${fmt(grandInput + grandCached)} Prompt-Tokens aus dem Cache`,
+            children: jsx('div', {
+              className: 'h-[3px] w-full rounded-full overflow-hidden bg-(--ui-stroke-secondary) flex',
+              children: jsx('div', {
+                className: 'h-full bg-(--ui-accent)',
+                style: { width: Math.min(100, grandCached / (grandInput + grandCached) * 100) + '%' },
+              }),
+            }),
+          })
+        : null,
+      // Mini histogram: tokens per day over the active window
+      histOk && rows.length > 0
+        ? jsx('div', {
+            className: 'shrink-0',
+            children: jsx('div', {
+              className: 'rounded-md border border-(--ui-stroke-secondary) px-2 py-1.5',
+              children: jsxs('div', {
+                className: 'flex items-end gap-[2px] h-8',
+                children: histBuckets.map(b => {
+                  const h = histMax ? Math.max(4, Math.round(b.tokens / histMax * 100)) : 0
+                  return jsx('div', {
+                    className: 'flex-1 flex flex-col justify-end h-full',
+                    title: `${dayLabel(b.key)} · ${fmt(b.tokens)} Tokens · ${b.sessions} Session${b.sessions === 1 ? '' : 'en'}`,
+                    children: jsx('div', {
+                      className: 'w-full rounded-sm bg-(--ui-accent)' + (b.tokens === 0 ? '/30' : ''),
+                      style: { height: (b.tokens === 0 ? 3 : h) + '%' },
+                    }),
+                  }, b.key)
+                }),
+              }),
+            }),
+          })
+        : null,
 
       // Session list
       jsx('div', {
         className: 'flex-1 overflow-auto',
         children: rows.length === 0
-          ? jsx('div', { className: 'text-(--ui-text-quaternary) text-center py-4', children: 'No sessions' })
+          ? jsxs('div', {
+              className: 'text-(--ui-text-quaternary) text-center py-4',
+              children: [
+                jsx('div', { className: 'text-base mb-1', children: '🌫️' }),
+                EMPTY_MSG[range] || 'No sessions',
+              ],
+            })
           : jsxs('table', {
               className: 'w-full table-fixed border-collapse',
               children: [
@@ -783,73 +954,114 @@ function TokenPane() {
                   className: 'sticky top-0 bg-(--card) z-10',
                   children: [
                     jsxs('tr', { className: 'text-(--ui-text-quaternary) text-[0.625rem] uppercase', children: [
-                      Th(0, 'text-left py-1 pr-2 font-normal truncate', 'Session'),
-                      Th(1, 'text-right py-1 px-1 font-normal', 'In'),
-                      Th(2, 'text-right py-1 px-1 font-normal', '⚡', 'Cached input tokens'),
-                      Th(3, 'text-right py-1 px-1 font-normal', 'Out'),
-                      Th(4, 'text-right py-1 pl-1 font-normal', '💰', 'Estimated cost (client-side pricing table)'),
+                      Th(0, 'text-left py-1 pr-2 font-normal truncate', 'Session', 'Sortieren: letzte Aktivität', 'activity'),
+                      Th(1, 'text-right py-1 px-1 font-normal', 'In', 'Sortieren: Input-Tokens', 'in'),
+                      Th(2, 'text-right py-1 px-1 font-normal', '⚡', 'Sortieren: Cache-Reads · Cached input tokens', 'cached'),
+                      Th(3, 'text-right py-1 px-1 font-normal', 'Out', 'Sortieren: Output-Tokens', 'out'),
+                      Th(4, 'text-right py-1 pl-1 font-normal', '💰', 'Sortieren: geschätzte Kosten · Estimated cost (client-side pricing table)', 'cost'),
                     ]})
                   ]
                 }),
                 jsx('tbody', {
-                  children: rows.map(row => {
-                    const u = usageFor(row)
-                    const isFocused = row.id === focusedSid
-                    const cached = u.cache_read || 0
-                    const cost = estimateCost({ ...u, input: u.input, cache_read: cached, output: u.output, model: u.model })
-                    // Per-model tooltip from persistent model rows (when present)
-                    const modelTip = row.modelRows.length
-                      ? '\nModelle: ' + row.modelRows
-                          .map(m => `${m.model}${m.task ? ' (' + m.task + ')' : ''}: in ${fmt(m.input_tokens)}, ⚡ ${fmt(m.cache_read_tokens)}, out ${fmt(m.output_tokens)}`)
-                          .join(' · ')
-                      : ''
-                    const resetTip = row.hadReset
-                      ? '\n⚠ DB-Reset erkannt — Werte aus dem Known-Ledger (monoton)'
-                      : ''
-                    return jsxs('tr', {
-                      className: isFocused
-                        ? 'bg-(--ui-accent)/10 border-l-2 border-(--ui-accent)'
-                        : 'border-b border-(--ui-stroke-secondary)/50',
-                      children: [
-                        jsxs('td', {
-                          className: 'py-1 pr-2 truncate',
-                          title: (row.title || row.id) + (row.lastActive ? ` (${fmtDate(row.lastActive)})` : '') + resetTip + modelTip,
-                          children: [
-                            row.hadReset
-                              ? jsx('span', { className: 'text-amber-500 mr-1', title: 'DB-Reset/Anomalie im Ledger verzeichnet — known-Werte bleiben monoton', children: '⚠' })
-                              : null,
-                            row.isLiveOnly
-                              ? jsx('span', { className: 'text-(--ui-text-quaternary) mr-1', title: 'Live session (not yet persisted)', children: '●' })
-                              : null,
-                            row.title || row.id.slice(0, 12),
-                          ]
-                        }),
-                        jsx('td', { className: 'text-right py-1 px-1 tabular-nums text-(--ui-text-secondary)', children: fmt(u.input || 0) }),
-                        jsx('td', {
-                          className: 'text-right py-1 px-1 tabular-nums text-(--ui-text-secondary)',
-                          title: cached > 0
-                            ? `Cached: ${fmtFull(cached)}${u.cache_hit_pct != null ? ` · Hit: ${u.cache_hit_pct}%` : ''}`
-                            : undefined,
-                          children: cached > 0
-                            ? jsx('span', { className: 'text-(--ui-accent)', children: fmt(cached) })
-                            : jsx('span', { className: 'text-(--ui-text-quaternary)', children: '—' }),
-                        }),
-                        jsx('td', { className: 'text-right py-1 px-1 tabular-nums text-(--ui-text-secondary)', children: fmt(u.output || 0) }),
-                        jsx('td', {
-                          className: 'text-right py-1 pl-1 tabular-nums text-(--ui-text-quaternary)',
-                          title: cost != null
-                            ? `Estimated: ${(cost * EUR_RATE).toFixed(2)} € (USD ${cost.toFixed(4)})${modelTip}`
-                            : 'No price for ' + (u.model || 'this model'),
-                          children: cost != null
-                            ? (cost * EUR_RATE).toFixed(2) + ' €'
-                            : jsx('span', { className: 'text-(--ui-text-quaternary)', children: '—' }),
-                        }),
-                      ]
-                    }, row.id)
-                  })
+                  children: (() => {
+                    // Day separators only in the default activity sort —
+                    // any other sort interleaves days, separators would lie.
+                    const showDays = curSort === 'activity'
+                    const out = []
+                    let lastDay = null
+                    const maxOut = sortedRows.reduce((m, r) => Math.max(m, r.u.output || 0), 0)
+                    for (const row of sortedRows) {
+                      if (showDays && row.lastActive != null) {
+                        const key = dayKeyTs(row.lastActive)
+                        if (key !== lastDay) {
+                          lastDay = key
+                          out.push(jsxs('tr', {
+                            className: 'text-[0.625rem] text-(--ui-text-quaternary) border-b border-(--ui-stroke-secondary)/50',
+                            children: [
+                              jsx('td', { colSpan: 5, className: 'py-1 font-medium', children: dayLabel(key) }),
+                            ],
+                          }, 'day-' + key))
+                        }
+                      }
+                      const u = usageFor(row)
+                      const isFocused = row.id === focusedSid
+                      const cached = u.cache_read || 0
+                      const cost = estimateCost({ input: u.input, cache_read: cached, output: u.output, model: u.model })
+                      // Per-model tooltip from persistent model rows (when present)
+                      const modelTip = row.modelRows.length
+                        ? '\nModelle: ' + row.modelRows
+                            .map(m => `${m.model}${m.task ? ' (' + m.task + ')' : ''}: in ${fmt(m.input_tokens)}, ⚡ ${fmt(m.cache_read_tokens)}, out ${fmt(m.output_tokens)}`)
+                            .join(' · ')
+                        : ''
+                      const resetTip = row.hadReset
+                        ? '\n⚠ DB-Reset erkannt — Werte aus dem Known-Ledger (monoton)'
+                        : ''
+                      // Relative-size bar behind the Out cell (vs. the
+                      // largest session in view)
+                      const outBar = maxOut > 0 && (u.output || 0) > 0
+                        ? jsx('div', {
+                            className: 'absolute inset-y-[3px] right-0 rounded-sm bg-(--ui-accent)/10 z-0',
+                            style: { width: Math.max(4, (u.output / maxOut) * 100) + '%' },
+                          })
+                        : null
+                      out.push(jsxs('tr', {
+                        className: isFocused
+                          ? 'bg-(--ui-accent)/10 border-l-2 border-(--ui-accent)'
+                          : 'border-b border-(--ui-stroke-secondary)/50',
+                        children: [
+                          jsxs('td', {
+                            className: 'py-1 pr-2 truncate',
+                            title: (row.title || row.id) + (row.lastActive ? ` (${fmtDate(row.lastActive)})` : '') + resetTip + modelTip,
+                            children: [
+                              row.hadReset
+                                ? jsx('span', { className: 'text-amber-500 mr-1', title: 'DB-Reset/Anomalie im Ledger verzeichnet — known-Werte bleiben monoton', children: '⚠' })
+                                : null,
+                              row.isLiveOnly
+                                ? jsx('span', { className: 'text-(--ui-text-quaternary) mr-1', title: 'Live session (not yet persisted)', children: '●' })
+                                : null,
+                              row.title || row.id.slice(0, 12),
+                            ]
+                          }),
+                          jsx('td', { className: 'text-right py-1 px-1 tabular-nums text-(--ui-text-secondary)', children: fmt(u.input || 0) }),
+                          jsx('td', {
+                            className: 'text-right py-1 px-1 tabular-nums text-(--ui-text-secondary)',
+                            title: cached > 0
+                              ? `Cached: ${fmtFull(cached)}${u.cache_hit_pct != null ? ` · Hit: ${u.cache_hit_pct}%` : ''}`
+                              : undefined,
+                            children: cached > 0
+                              ? jsx('span', { className: 'text-(--ui-accent)', children: fmt(cached) })
+                              : jsx('span', { className: 'text-(--ui-text-quaternary)', children: '—' }),
+                          }),
+                          jsxs('td', {
+                            className: 'relative text-right py-1 px-1 tabular-nums text-(--ui-text-secondary)',
+                            title: maxOut > 0 ? `Output relativ zur größten Session (${fmt(maxOut)})` : undefined,
+                            children: [
+                              outBar,
+                              jsx('span', { className: 'relative z-10', children: fmt(u.output || 0) }),
+                            ]
+                          }),
+                          jsx('td', {
+                            className: 'text-right py-1 pl-1 tabular-nums text-(--ui-text-quaternary)',
+                            title: cost != null
+                              ? `Estimated: ${(cost * EUR_RATE).toFixed(2)} € (USD ${cost.toFixed(4)})${modelTip}`
+                              : 'No price for ' + (u.model || 'this model'),
+                            children: cost != null
+                              ? (cost * EUR_RATE).toFixed(2) + ' €'
+                              : jsx('span', { className: 'text-(--ui-text-quaternary)', children: '—' }),
+                          }),
+                        ]
+                      }, row.id))
+                    }
+                    return out
+                  })()
                 })
               ]
             })
+      }),
+      // Footer: session/model counts + active calendar window
+      jsx('div', {
+        className: 'shrink-0 text-[0.625rem] text-(--ui-text-quaternary) text-center pt-1',
+        children: `${rows.length} Session${rows.length === 1 ? '' : 'en'} · ${histByModel.length} Modell${histByModel.length === 1 ? '' : 'e'}${histOk ? ' · ' + windowLabel(range) : ''}`,
       }),
     ]
   })
