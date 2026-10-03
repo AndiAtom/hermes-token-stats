@@ -253,8 +253,54 @@ function mergeUsage(sid, usage) {
   usageMap.set({ ...usageMap.get(), [sid]: { ...cur, ...usage } })
 }
 
-// History window for the pane (days): 7, 30, or 0 = all time.
-const historyDays = atom(30)
+// History range presets for the pane — CALENDAR windows, not rolling:
+//   day      = today 0:00 → open
+//   workweek = Mon 0:00 → Sat 0:00 (exclusive, i.e. Mon–Fri 23:59:59)
+//   week     = Mon 0:00 → open (full Mon–Sun calendar week)
+//   month    = 1st of month 0:00 → open
+//   all      = everything
+// rollingDays maps each preset to the legacy usage.history fallback,
+// which only understands rolling day windows.
+const RANGE_PRESETS = [
+  { key: 'day', label: '1d', rollingDays: 1,
+    tip: 'Heute (ab 0:00 Uhr)' },
+  { key: 'workweek', label: '5d', rollingDays: 5,
+    tip: 'Laufende Arbeitswoche: Mo 0:00 – Fr 23:59:59' },
+  { key: 'week', label: '7d', rollingDays: 7,
+    tip: 'Laufende Kalenderwoche: Mo 0:00 – So 23:59:59' },
+  { key: 'month', label: '30d', rollingDays: 30,
+    tip: 'Laufender Monat (ab dem 1., 0:00 Uhr)' },
+  { key: 'all', label: '∞', rollingDays: 0,
+    tip: 'Alles' },
+]
+const historyRange = atom('month')
+
+// Compute the calendar window for a preset in LOCAL time.
+// Returns { since, until, rollingDays } — since/until epoch seconds,
+// `since` inclusive, `until` EXCLUSIVE (0 = open-ended).
+function windowFor(key) {
+  const p = RANGE_PRESETS.find(p => p.key === key) || RANGE_PRESETS[3]
+  if (p.key === 'all') return { since: 0, until: 0, rollingDays: 0 }
+  const now = new Date()
+  const y = now.getFullYear(), mo = now.getMonth(), d = now.getDate()
+  if (p.key === 'day') {
+    return { since: Math.floor(new Date(y, mo, d).getTime() / 1000),
+             until: 0, rollingDays: 1 }
+  }
+  if (p.key === 'month') {
+    return { since: Math.floor(new Date(y, mo, 1).getTime() / 1000),
+             until: 0, rollingDays: 30 }
+  }
+  // week / workweek: start of the current calendar week (Monday 0:00)
+  const dow = (now.getDay() + 6) % 7 // Mon=0 … Sun=6
+  const since = Math.floor(new Date(y, mo, d - dow).getTime() / 1000)
+  if (p.key === 'workweek') {
+    // Mon 0:00 → Sat 0:00 (exclusive) = Mon–Fri 23:59:59
+    const until = Math.floor(new Date(y, mo, d - dow + 5).getTime() / 1000)
+    return { since, until, rollingDays: 5 }
+  }
+  return { since, until: 0, rollingDays: 7 } // full week, open-ended
+}
 
 // ctx.rest handle — set once in register(ctx); null = backend unavailable
 // (plugin not loaded yet, OAuth remote → ctx.rest is a no-op there).
@@ -404,7 +450,7 @@ function TokenChip() {
       jsxs('button', {
         type: 'button',
         className: 'inline-flex h-full items-center gap-1.5 px-1.5 text-[0.6875rem] text-(--ui-text-tertiary) tabular-nums cursor-pointer hover:text-(--ui-text-secondary)',
-        title: `Token Stats v4.0 · Click: configure display · drag header edges to resize pane columns${isPersisted ? ' · 📚 Known-Ledger values (monotonic)' : ''}\n\nInput: ${fmtFull(input)} · Cached: ${fmtFull(cached)}${hitPct != null ? ` (${hitPct}%)` : ''} · Output: ${fmtFull(out)} · Total: ${fmtFull(total)}`
+        title: `Token Stats v4.1 · Click: configure display · drag header edges to resize pane columns${isPersisted ? ' · 📚 Known-Ledger values (monotonic)' : ''}\n\nInput: ${fmtFull(input)} · Cached: ${fmtFull(cached)}${hitPct != null ? ` (${hitPct}%)` : ''} · Output: ${fmtFull(out)} · Total: ${fmtFull(total)}`
           + (ctxPct != null && ctxMax > 0 ? `\nContext: ${fmtFull(ctxUsed)} / ${fmtFull(ctxMax)} tokens (${ctxPct}%)` : '')
           + (cost != null ? `\nCost: ${(cost * EUR_RATE).toFixed(2)} €` : '')
           + (calls > 0 ? `\nAPI calls: ${fmtFull(calls)}` : ''),
@@ -475,19 +521,23 @@ function TokenChip() {
 // (old gateway, OAuth remote) → live-event map only ("live only").
 // Anomalies (DB resets) are flagged per session via /events (⚠ DB-Reset).
 
-function HistoryQuery(days) {
+function HistoryQuery(range) {
   // Monotonic per-session totals + per-model rows from the ledger.
+  // Calendar windows: since/until (epoch secs, until exclusive) to the
+  // ledger backend; the legacy usage.history fallback only understands
+  // rolling `days`, so it gets the preset's rollingDays approximation.
+  const win = windowFor(range)
   return useQuery({
-    queryKey: [ID, 'knownHistory', days],
+    queryKey: [ID, 'knownHistory', win.since, win.until],
     queryFn: async () => {
       // 1st choice: known-ledger backend (ctx.rest namespace)
-      const led = await fetchLedger({ days, limit: 200 })
+      const led = await fetchLedger({ since: win.since, until: win.until, days: 0, limit: 200 })
       if (led && Array.isArray(led.sessions)) {
         return { ok: true, res: led, source: 'ledger' }
       }
       // 2nd choice: legacy usage.history RPC
       try {
-        const res = await host.request('usage.history', { days, limit: 200, models: true })
+        const res = await host.request('usage.history', { days: win.rollingDays, limit: 200, models: true })
         return { ok: true, res, source: 'rpc' }
       } catch (e) {
         return { ok: false, error: String(e && e.message ? e.message : e) }
@@ -541,11 +591,11 @@ function useAnomalies(sids) {
 function TokenPane() {
   const focusedSid = useValue(host.state.focusedSessionId)
   const allUsage = useValue(usageMap)
-  const days = useValue(historyDays)
+  const range = useValue(historyRange)
   const breakdown = useContextBreakdown(true)
   const W = useValue(colWidths)
 
-  const hist = HistoryQuery(days)
+  const hist = HistoryQuery(range)
   const histOk = hist.data && hist.data.ok
   const histSessions = histOk ? (hist.data.res.sessions || []) : []
   const histByModel = histOk ? (hist.data.res.model_usage || []) : []
@@ -673,15 +723,16 @@ function TokenPane() {
                   title: 'Ledger backend AND usage.history RPC unavailable — live sessions only.\nBackend: /root/.hermes/plugins/token-stats/ (plugin_api.py) + daemon: systemctl status token-stats-ledger',
                   children: 'live only' })
               : null,
-            ...[1, 7, 30, 0].map(d => jsx('button', {
+            ...RANGE_PRESETS.map(p => jsx('button', {
               type: 'button',
-              className: (d === days
+              title: p.tip,
+              className: (p.key === range
                 ? 'bg-(--ui-accent) text-(--card)'
                 : 'text-(--ui-text-quaternary) hover:bg-(--ui-stroke-secondary)') +
                 ' rounded-sm px-1.5 py-0.5 text-[0.625rem] cursor-pointer',
-              onClick: () => { historyDays.set(d) },
-              children: d === 0 ? '∞' : d + 'd',
-            }, 'd' + d)),
+              onClick: () => { historyRange.set(p.key) },
+              children: p.label,
+            }, p.key)),
           ]}),
         ]
       }),
