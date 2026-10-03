@@ -944,16 +944,30 @@ function TokenPane() {
           ]
         })
       }),
-      // Cache-hit bar: visual share of cached vs. uncached prompt tokens
+      // Cache-hit bar: visual share of cached vs. uncached prompt tokens.
+      // Geometry/colors as INLINE STYLES — the desktop runtime's utility
+      // generation proved unreliable for this element's class set
+      // (h-[3px] et al. rendered nothing; inline styles always paint).
       grandInput + grandCached > 0
         ? jsx('div', {
-            className: 'shrink-0 -mt-1 px-2',
+            className: 'shrink-0',
+            style: { marginTop: '-2px', paddingLeft: 8, paddingRight: 8 },
             title: `Cache-Hit: ${Math.round(grandCached / (grandInput + grandCached) * 100)}% — ${fmt(grandCached)} von ${fmt(grandInput + grandCached)} Prompt-Tokens aus dem Cache`,
             children: jsx('div', {
-              className: 'h-[3px] w-full rounded-full overflow-hidden bg-(--ui-stroke-secondary) flex',
+              style: {
+                height: 3,
+                width: '100%',
+                borderRadius: 9999,
+                overflow: 'hidden',
+                background: 'var(--ui-stroke-secondary)',
+                display: 'flex',
+              },
               children: jsx('div', {
-                className: 'h-full bg-(--ui-accent)',
-                style: { width: Math.min(100, grandCached / (grandInput + grandCached) * 100) + '%' },
+                style: {
+                  height: '100%',
+                  background: 'var(--ui-accent)',
+                  width: Math.min(100, grandCached / (grandInput + grandCached) * 100) + '%',
+                },
               }),
             }),
           })
