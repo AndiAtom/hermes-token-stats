@@ -1042,54 +1042,10 @@ function TokenPane() {
           })
         : null,
 
-      // Per-model breakdown (footer "N Modelle" toggle). Renders above the
-      // session list, below summary/histogram.
-      modelListOpenVal && histOk && modelAggList.length > 0
-        ? jsxs('div', {
-            className: 'shrink-0',
-            children: [
-              jsx('div', {
-                className: 'flex items-center justify-between text-[0.625rem] text-(--ui-text-quaternary) mb-1 px-0.5',
-                children: [
-                  jsx('span', { className: 'uppercase', children: 'Modelle' }),
-                  jsx('span', { className: 'tabular-nums', children: `${modelAggList.length} Modell${modelAggList.length === 1 ? '' : 'e'}` }),
-                ],
-              }),
-              jsxs('div', {
-                className: 'rounded-md border border-(--ui-stroke-secondary) divide-y divide-(--ui-stroke-secondary)/50',
-                children: modelAggList.map(m => {
-                  const mCost = m.cost > 0 ? (m.cost * EUR_RATE).toFixed(2) + ' €' : null
-                  const tip = m.sessions.size === 1
-                    ? '1 Sitzung'
-                    : `${m.sessions.size} Sitzungen`
-                  return jsxs('div', {
-                    className: 'flex items-center justify-between gap-2 px-2 py-1',
-                    title: `${m.model}\nIn: ${fmtFull(m.in)} · ⚡: ${fmtFull(m.cached)} · Out: ${fmtFull(m.out)} · Calls: ${fmtFull(m.calls)}\n${tip}${mCost != null ? ` · Geschätzt: ${(m.cost * EUR_RATE).toFixed(2)} € (USD ${m.cost.toFixed(2)})` : (m.unpriced ? ' · kein Preis' : '')}`,
-                    children: [
-                      jsxs('div', { className: 'flex items-baseline gap-1.5 min-w-0', children: [
-                        jsx('span', { className: 'truncate font-medium', children: m.model }),
-                        jsx('span', { className: 'text-[0.625rem] text-(--ui-text-quaternary) shrink-0', children: tip }),
-                      ]}),
-                      jsxs('div', { className: 'flex items-center gap-2 shrink-0 tabular-nums text-(--ui-text-secondary)', children: [
-                        jsx('span', { className: 'text-(--ui-accent)', title: `Cache-Reads: ${fmtFull(m.cached)}`, children: '⚡' + fmt(m.cached) }),
-                        jsx('span', { title: `In: ${fmtFull(m.in)}`, children: fmt(m.in) }),
-                        jsx('span', { title: `Out: ${fmtFull(m.out)}`, children: fmt(m.out) }),
-                        jsx('span', {
-                          className: 'text-(--ui-text-quaternary) min-w-[3.5rem] text-right',
-                          children: mCost != null ? (m.unpriced ? '≈ ' : '') + mCost : '—',
-                        }),
-                      ]}),
-                    ],
-                  }, m.model)
-                }),
-              }),
-            ],
-          })
-        : null,
-
-      // Session list
+      // Session list — min-h-0 so it can shrink when the model list below
+      // takes vertical space.
       jsx('div', {
-        className: 'flex-1 overflow-auto',
+        className: 'flex-1 min-h-0 overflow-auto',
         children: rows.length === 0
           ? jsxs('div', {
               className: 'text-(--ui-text-quaternary) text-center py-4',
@@ -1250,6 +1206,50 @@ function TokenPane() {
               ]
             })
       }),
+      // Per-model breakdown (footer "N Modelle" toggle). Pinned to the
+      // BOTTOM of the pane, directly above the footer — the session list
+      // above shrinks instead. Compact rows: one total-token number (the
+      // breakdown ⚡/In/Out lives in the tooltip).
+      modelListOpenVal && histOk && modelAggList.length > 0
+        ? jsxs('div', {
+            className: 'shrink-0',
+            children: [
+              jsxs('div', {
+                className: 'flex items-center justify-between text-[0.625rem] text-(--ui-text-quaternary) mb-0.5 px-0.5',
+                children: [
+                  jsx('span', { className: 'uppercase', children: 'Modelle' }),
+                  jsx('span', { className: 'tabular-nums', children: `${modelAggList.length} Modell${modelAggList.length === 1 ? '' : 'e'}` }),
+                ],
+              }),
+              jsxs('div', {
+                className: 'rounded-md border border-(--ui-stroke-secondary) divide-y divide-(--ui-stroke-secondary)/50 max-h-40 overflow-auto',
+                children: modelAggList.map(m => {
+                  const total = m.in + m.cached + m.out
+                  const mCost = m.cost > 0 ? (m.cost * EUR_RATE).toFixed(2) + ' €' : null
+                  const tip = m.sessions.size === 1 ? '1 Sitzung' : `${m.sessions.size} Sitzungen`
+                  return jsxs('div', {
+                    className: 'flex items-center justify-between gap-2 px-2 py-1',
+                    title: `${m.model}\nIn: ${fmtFull(m.in)} · ⚡: ${fmtFull(m.cached)} · Out: ${fmtFull(m.out)}\nGesamt: ${fmtFull(total)} Tokens · Calls: ${fmtFull(m.calls)} · ${tip}${mCost != null ? ` · Geschätzt: ${(m.cost * EUR_RATE).toFixed(2)} € (USD ${m.cost.toFixed(2)})` : (m.unpriced ? ' · kein Preis' : '')}`,
+                    children: [
+                      jsxs('div', { className: 'flex items-baseline gap-1.5 min-w-0', children: [
+                        jsx('span', { className: 'truncate font-medium', children: m.model }),
+                        jsx('span', { className: 'text-[0.625rem] text-(--ui-text-quaternary) shrink-0', children: tip }),
+                      ]}),
+                      jsxs('div', { className: 'flex items-center gap-2 shrink-0 tabular-nums text-(--ui-text-secondary)', children: [
+                        jsx('span', { title: `Gesamttokens: ${fmtFull(total)}`, children: fmt(total) }),
+                        jsx('span', {
+                          className: 'text-(--ui-text-quaternary) min-w-[3.5rem] text-right',
+                          children: mCost != null ? (m.unpriced ? '≈ ' : '') + mCost : '—',
+                        }),
+                      ]}),
+                    ],
+                  }, m.model)
+                }),
+              }),
+            ],
+          })
+        : null,
+
       // Footer: session/model counts + active calendar window. The model
       // count is a toggle for the per-model list above.
       jsxs('div', {
