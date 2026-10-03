@@ -966,21 +966,51 @@ function TokenPane() {
                 }),
                 jsx('tbody', {
                   children: (() => {
-                    // Day separators only in the default activity sort —
-                    // any other sort interleaves days, separators would lie.
+                    // Day separators (with per-day totals) only in the
+                    // default activity sort — any other sort interleaves
+                    // days, separators would lie.
                     const showDays = curSort === 'activity'
                     const out = []
                     let lastDay = null
                     const maxOut = sortedRows.reduce((m, r) => Math.max(m, r.u.output || 0), 0)
+                    // Per-day aggregates for the separator totals row
+                    const dayAgg = {}
+                    if (showDays) {
+                      for (const row of sortedRows) {
+                        if (row.lastActive == null) continue
+                        const k = dayKeyTs(row.lastActive)
+                        const a = dayAgg[k] || (dayAgg[k] = { in: 0, cached: 0, out: 0, cost: 0, unpriced: 0 })
+                        a.in += row.u.input || 0
+                        a.cached += row.u.cache_read || 0
+                        a.out += row.u.output || 0
+                        if (row.cost != null) a.cost += row.cost
+                        else if ((row.u.input || 0) + (row.u.output || 0) > 0) a.unpriced++
+                      }
+                    }
                     for (const row of sortedRows) {
                       if (showDays && row.lastActive != null) {
                         const key = dayKeyTs(row.lastActive)
                         if (key !== lastDay) {
                           lastDay = key
+                          const a = dayAgg[key]
                           out.push(jsxs('tr', {
                             className: 'text-[0.625rem] text-(--ui-text-quaternary) border-b border-(--ui-stroke-secondary)/50',
                             children: [
-                              jsx('td', { colSpan: 5, className: 'py-1 font-medium', children: dayLabel(key) }),
+                              jsx('td', {
+                                className: 'py-1 pr-2 font-medium',
+                                title: `${dayLabel(key)} — ${fmtFull(a.in)} in · ${fmtFull(a.cached)} ⚡ · ${fmtFull(a.out)} out${a.cost > 0 ? ` · ${(a.cost * EUR_RATE).toFixed(2)} €` : ''}`,
+                                children: dayLabel(key) }),
+                              jsx('td', { className: 'text-right px-1 py-1 tabular-nums', title: `Input gesamt: ${fmtFull(a.in)}`, children: fmt(a.in) }),
+                              jsx('td', { className: 'text-right px-1 py-1 tabular-nums text-(--ui-accent)', title: `Cache-Reads gesamt: ${fmtFull(a.cached)}`, children: fmt(a.cached) }),
+                              jsx('td', { className: 'text-right px-1 py-1 tabular-nums', title: `Output gesamt: ${fmtFull(a.out)}`, children: fmt(a.out) }),
+                              jsx('td', {
+                                className: 'text-right pl-1 py-1 tabular-nums',
+                                title: a.cost > 0
+                                  ? `Geschätzt: ${(a.cost * EUR_RATE).toFixed(2)} € (USD ${a.cost.toFixed(2)})${a.unpriced > 0 ? ` — ${a.unpriced} unbepreis${a.unpriced === 1 ? 'te Sitzung' : 'te Sitzungen'} ausgeschlossen` : ''}`
+                                  : 'Keine Kosten für diesen Tag',
+                                children: a.cost > 0
+                                  ? `${a.unpriced > 0 ? '≈ ' : ''}${(a.cost * EUR_RATE).toFixed(2)} €`
+                                  : '—' }),
                             ],
                           }, 'day-' + key))
                         }
