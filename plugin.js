@@ -327,6 +327,10 @@ const sortDir = atom('desc')
 // visible, only the group's session rows are hidden. Session-local.
 const collapsedDays = atom({})
 
+// Model list (footer toggle): true → the pane renders the per-model
+// breakdown table above the session list. Session-local, default off.
+const modelListOpen = atom(false)
+
 function toggleDayCollapse(key) {
   // Flip the RESOLVED state, not the raw override: default-collapsed
   // days (everything except today) have no entry yet, so a naive
@@ -575,7 +579,7 @@ function TokenChip() {
       jsxs('button', {
         type: 'button',
         className: 'inline-flex h-full items-center gap-1.5 px-1.5 text-[0.6875rem] text-(--ui-text-tertiary) tabular-nums cursor-pointer hover:text-(--ui-text-secondary)',
-        title: `Token Stats v4.2.2 · Click: configure display · drag header edges to resize pane columns${isPersisted ? ' · 📚 Known-Ledger values (monotonic)' : ''}\n\nInput: ${fmtFull(input)} · Cached: ${fmtFull(cached)}${hitPct != null ? ` (${hitPct}%)` : ''} · Output: ${fmtFull(out)} · Total: ${fmtFull(total)}`
+        title: `Token Stats v4.3.0 · Click: configure display · drag header edges to resize pane columns${isPersisted ? ' · 📚 Known-Ledger values (monotonic)' : ''}\n\nInput: ${fmtFull(input)} · Cached: ${fmtFull(cached)}${hitPct != null ? ` (${hitPct}%)` : ''} · Output: ${fmtFull(out)} · Total: ${fmtFull(total)}`
           + (ctxPct != null && ctxMax > 0 ? `\nContext: ${fmtFull(ctxUsed)} / ${fmtFull(ctxMax)} tokens (${ctxPct}%)` : '')
           + (cost != null ? `\nCost: ${(cost * EUR_RATE).toFixed(2)} €` : '')
           + (calls > 0 ? `\nAPI calls: ${fmtFull(calls)}` : ''),
@@ -732,6 +736,28 @@ function TokenPane() {
     modelRowsBySid[sid].push(r)
   }
 
+  // Per-model aggregate over the active window (footer model list).
+  // liveIn/liveCached/liveOut are the ledger's last-db-snapshot counters —
+  // max'd against zero but NOT against live in-memory usage (no per-model
+  // live mapping exists outside modelRows; window totals elsewhere in the
+  // pane stay the authority). Sessions counted per distinct model.
+  const modelAgg = {}
+  for (const r of histByModel) {
+    const m = modelAgg[r.model] || (modelAgg[r.model] = {
+      model: r.model,
+      in: 0, cached: 0, out: 0, calls: 0, sessions: new Set(), cost: 0, unpriced: false,
+    })
+    m.in += Math.max(r.input_tokens || 0, r.live_in || 0)
+    m.cached += Math.max(r.cache_read_tokens || 0, r.live_cached || 0)
+    m.out += Math.max(r.output_tokens || 0, r.live_out || 0)
+    m.calls += Math.max(r.api_calls || 0, r.live_calls || 0)
+    m.sessions.add(r.session_id)
+    const c = estimateCost({ input: r.input_tokens, cache_read: r.cache_read_tokens, output: r.output_tokens, model: r.model })
+    if (c != null) m.cost += c; else if ((r.input_tokens || 0) + (r.output_tokens || 0) > 0) m.unpriced = true
+  }
+  const modelAggList = Object.values(modelAgg)
+    .sort((a, b) => ((b.in + b.cached + b.out) - (a.in + a.cached + a.out)))
+
   const { data: sessionList } = useQuery({
     queryKey: [ID, 'sessions'],
     queryFn: () => host.request('session.list', { limit: 200 }),
@@ -829,6 +855,7 @@ function TokenPane() {
   const curSort = useValue(sortBy)
   const curDir = useValue(sortDir)
   const dayCollapse = useValue(collapsedDays)
+  const modelListOpenVal = useValue(modelListOpen)
   // Resolved collapse state: explicit override if set, else default
   // (today expanded, every other day collapsed)
   const todayKey = dayKeyDate(new Date())
@@ -1015,6 +1042,51 @@ function TokenPane() {
           })
         : null,
 
+      // Per-model breakdown (footer "N Modelle" toggle). Renders above the
+      // session list, below summary/histogram.
+      modelListOpenVal && histOk && modelAggList.length > 0
+        ? jsxs('div', {
+            className: 'shrink-0',
+            children: [
+              jsx('div', {
+                className: 'flex items-center justify-between text-[0.625rem] text-(--ui-text-quaternary) mb-1 px-0.5',
+                children: [
+                  jsx('span', { className: 'uppercase', children: 'Modelle' }),
+                  jsx('span', { className: 'tabular-nums', children: `${modelAggList.length} Modell${modelAggList.length === 1 ? '' : 'e'}` }),
+                ],
+              }),
+              jsxs('div', {
+                className: 'rounded-md border border-(--ui-stroke-secondary) divide-y divide-(--ui-stroke-secondary)/50',
+                children: modelAggList.map(m => {
+                  const mCost = m.cost > 0 ? (m.cost * EUR_RATE).toFixed(2) + ' €' : null
+                  const tip = m.sessions.size === 1
+                    ? '1 Sitzung'
+                    : `${m.sessions.size} Sitzungen`
+                  return jsxs('div', {
+                    className: 'flex items-center justify-between gap-2 px-2 py-1',
+                    title: `${m.model}\nIn: ${fmtFull(m.in)} · ⚡: ${fmtFull(m.cached)} · Out: ${fmtFull(m.out)} · Calls: ${fmtFull(m.calls)}\n${tip}${mCost != null ? ` · Geschätzt: ${(m.cost * EUR_RATE).toFixed(2)} € (USD ${m.cost.toFixed(2)})` : (m.unpriced ? ' · kein Preis' : '')}`,
+                    children: [
+                      jsxs('div', { className: 'flex items-baseline gap-1.5 min-w-0', children: [
+                        jsx('span', { className: 'truncate font-medium', children: m.model }),
+                        jsx('span', { className: 'text-[0.625rem] text-(--ui-text-quaternary) shrink-0', children: tip }),
+                      ]}),
+                      jsxs('div', { className: 'flex items-center gap-2 shrink-0 tabular-nums text-(--ui-text-secondary)', children: [
+                        jsx('span', { className: 'text-(--ui-accent)', title: `Cache-Reads: ${fmtFull(m.cached)}`, children: '⚡' + fmt(m.cached) }),
+                        jsx('span', { title: `In: ${fmtFull(m.in)}`, children: fmt(m.in) }),
+                        jsx('span', { title: `Out: ${fmtFull(m.out)}`, children: fmt(m.out) }),
+                        jsx('span', {
+                          className: 'text-(--ui-text-quaternary) min-w-[3.5rem] text-right',
+                          children: mCost != null ? (m.unpriced ? '≈ ' : '') + mCost : '—',
+                        }),
+                      ]}),
+                    ],
+                  }, m.model)
+                }),
+              }),
+            ],
+          })
+        : null,
+
       // Session list
       jsx('div', {
         className: 'flex-1 overflow-auto',
@@ -1178,10 +1250,26 @@ function TokenPane() {
               ]
             })
       }),
-      // Footer: session/model counts + active calendar window
-      jsx('div', {
+      // Footer: session/model counts + active calendar window. The model
+      // count is a toggle for the per-model list above.
+      jsxs('div', {
         className: 'shrink-0 text-[0.625rem] text-(--ui-text-quaternary) text-center pt-1',
-        children: `${rows.length} Sitzung${rows.length === 1 ? '' : 'en'} · ${histByModel.length} Modell${histByModel.length === 1 ? '' : 'e'}${histOk ? ' · ' + windowLabel(range) : ''}`,
+        children: [
+          `${rows.length} Sitzung${rows.length === 1 ? '' : 'en'} · `,
+          jsxs('button', {
+            type: 'button',
+            title: modelListOpenVal
+              ? 'Modell-Liste zuklappen'
+              : 'Modell-Liste aufklappen (auf- und absteigend über das aktive Fenster)',
+            className: (modelListOpenVal
+              ? 'text-(--ui-text-secondary) font-medium'
+              : 'hover:text-(--ui-text-secondary)') +
+              ' cursor-pointer underline decoration-(--ui-stroke-secondary) decoration-dotted underline-offset-2',
+            onClick: () => { modelListOpen.set(!modelListOpenVal) },
+            children: `${modelAggList.length} Modell${modelAggList.length === 1 ? '' : 'e'}`,
+          }, 'modelToggle'),
+          histOk ? ` · ${windowLabel(range)}` : '',
+        ],
       }),
     ]
   })
