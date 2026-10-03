@@ -328,9 +328,13 @@ const sortDir = atom('desc')
 const collapsedDays = atom({})
 
 function toggleDayCollapse(key) {
+  // Flip the RESOLVED state, not the raw override: default-collapsed
+  // days (everything except today) have no entry yet, so a naive
+  // "set true" would be a no-op and the day could never be expanded.
   const next = { ...collapsedDays.get() }
-  if (next[key]) delete next[key]
-  else next[key] = true
+  const todayKey = dayKeyDate(new Date())
+  const resolved = (key in next) ? Boolean(next[key]) : (key !== todayKey)
+  next[key] = !resolved // always an explicit override
   collapsedDays.set(next)
 }
 
@@ -887,12 +891,12 @@ function TokenPane() {
                     : 'Alle Tagesgruppen zuklappen (Summenzeilen bleiben sichtbar)',
                   className: 'text-(--ui-text-quaternary) hover:bg-(--ui-stroke-secondary) rounded-sm px-1.5 py-0.5 text-[0.625rem] cursor-pointer mr-1',
                   onClick: () => {
-                    if (allDaysCollapsed) collapsedDays.set({})
-                    else {
-                      const next = {}
-                      for (const k of dayKeys) next[k] = true
-                      collapsedDays.set(next)
-                    }
+                    const next = {}
+                    // allDaysCollapsed → explicitly EXPAND every day
+                    // (setting {} would restore the default, which keeps
+                    // non-today days collapsed); else collapse all.
+                    for (const k of dayKeys) next[k] = !allDaysCollapsed
+                    collapsedDays.set(next)
                   },
                   children: allDaysCollapsed ? '▸▸' : '▾▾',
                 }, 'collapseAll')
