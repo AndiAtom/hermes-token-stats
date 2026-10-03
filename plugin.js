@@ -322,6 +322,18 @@ function windowFor(key) {
 const sortBy = atom('activity') // activity | in | cached | out | cost
 const sortDir = atom('desc')
 
+// Collapsed day groups (activity sort): { dayKey: true }. Toggled by
+// clicking a day separator row; the separator (with its totals) stays
+// visible, only the group's session rows are hidden. Session-local.
+const collapsedDays = atom({})
+
+function toggleDayCollapse(key) {
+  const next = { ...collapsedDays.get() }
+  if (next[key]) delete next[key]
+  else next[key] = true
+  collapsedDays.set(next)
+}
+
 const SORTS = {
   activity: { dir: 'desc', val: r => (r.lastActive == null ? -Infinity : r.lastActive) },
   in: { dir: 'desc', val: r => r.u.input || 0 },
@@ -812,6 +824,7 @@ function TokenPane() {
   // Sorted view (SORTS defaults = server's activity order).
   const curSort = useValue(sortBy)
   const curDir = useValue(sortDir)
+  const dayCollapse = useValue(collapsedDays)
   const sortedRows = (() => {
     if (curSort === 'activity') return rows // server order + day separators
     const val = SORTS[curSort].val
@@ -993,13 +1006,22 @@ function TokenPane() {
                         if (key !== lastDay) {
                           lastDay = key
                           const a = dayAgg[key]
+                          const daySessions = sortedRows.filter(r => r.lastActive != null && dayKeyTs(r.lastActive) === key).length
+                          const isCollapsed = Boolean(dayCollapse[key])
                           out.push(jsxs('tr', {
-                            className: 'text-[0.625rem] text-(--ui-text-quaternary) border-b border-(--ui-stroke-secondary)/50',
+                            className: 'text-[0.625rem] text-(--ui-text-quaternary) border-b border-(--ui-stroke-secondary)/50 cursor-pointer select-none',
+                            onClick: () => toggleDayCollapse(key),
+                            title: `${dayLabel(key)} — ${fmtFull(a.in)} in · ${fmtFull(a.cached)} ⚡ · ${fmtFull(a.out)} out${a.cost > 0 ? ` · ${(a.cost * EUR_RATE).toFixed(2)} €` : ''}\n${isCollapsed ? 'Aufklappen' : 'Zuklappen'} (${daySessions} Sitzung${daySessions === 1 ? '' : 'en'})`,
                             children: [
-                              jsx('td', {
+                              jsxs('td', {
                                 className: 'py-1 pr-2 font-medium',
-                                title: `${dayLabel(key)} — ${fmtFull(a.in)} in · ${fmtFull(a.cached)} ⚡ · ${fmtFull(a.out)} out${a.cost > 0 ? ` · ${(a.cost * EUR_RATE).toFixed(2)} €` : ''}`,
-                                children: dayLabel(key) }),
+                                children: [
+                                  jsx('span', { className: 'inline-block w-2 mr-1 text-[0.5rem] leading-none', children: isCollapsed ? '▸' : '▾' }),
+                                  dayLabel(key),
+                                  isCollapsed
+                                    ? jsx('span', { className: 'ml-1 font-normal', children: `(${daySessions})` })
+                                    : null,
+                                ] }),
                               jsx('td', { className: 'text-right px-1 py-1 tabular-nums', title: `Input gesamt: ${fmtFull(a.in)}`, children: fmt(a.in) }),
                               jsx('td', { className: 'text-right px-1 py-1 tabular-nums text-(--ui-accent)', title: `Cache-Reads gesamt: ${fmtFull(a.cached)}`, children: fmt(a.cached) }),
                               jsx('td', { className: 'text-right px-1 py-1 tabular-nums', title: `Output gesamt: ${fmtFull(a.out)}`, children: fmt(a.out) }),
@@ -1015,6 +1037,8 @@ function TokenPane() {
                           }, 'day-' + key))
                         }
                       }
+                      // Skip session rows of collapsed day groups
+                      if (showDays && row.lastActive != null && dayCollapse[dayKeyTs(row.lastActive)]) continue
                       const u = usageFor(row)
                       const isFocused = row.id === focusedSid
                       const cached = u.cache_read || 0
