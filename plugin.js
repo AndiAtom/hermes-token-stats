@@ -579,7 +579,7 @@ function TokenChip() {
       jsxs('button', {
         type: 'button',
         className: 'inline-flex h-full items-center gap-1.5 px-1.5 text-[0.6875rem] text-(--ui-text-tertiary) tabular-nums cursor-pointer hover:text-(--ui-text-secondary)',
-        title: `Token Stats v4.3.0 · Click: configure display · drag header edges to resize pane columns${isPersisted ? ' · 📚 Known-Ledger values (monotonic)' : ''}\n\nInput: ${fmtFull(input)} · Cached: ${fmtFull(cached)}${hitPct != null ? ` (${hitPct}%)` : ''} · Output: ${fmtFull(out)} · Total: ${fmtFull(total)}`
+        title: `Token Stats v4.3.2 · Click: configure display · drag header edges to resize pane columns${isPersisted ? ' · 📚 Known-Ledger values (monotonic)' : ''}\n\nInput: ${fmtFull(input)} · Cached: ${fmtFull(cached)}${hitPct != null ? ` (${hitPct}%)` : ''} · Output: ${fmtFull(out)} · Total: ${fmtFull(total)}`
           + (ctxPct != null && ctxMax > 0 ? `\nContext: ${fmtFull(ctxUsed)} / ${fmtFull(ctxMax)} tokens (${ctxPct}%)` : '')
           + (cost != null ? `\nCost: ${(cost * EUR_RATE).toFixed(2)} €` : '')
           + (calls > 0 ? `\nAPI calls: ${fmtFull(calls)}` : ''),
@@ -757,6 +757,8 @@ function TokenPane() {
   }
   const modelAggList = Object.values(modelAgg)
     .sort((a, b) => ((b.in + b.cached + b.out) - (a.in + a.cached + a.out)))
+  // Scale for the per-model relative bars (largest model in view = 100%)
+  const maxModelTotal = modelAggList.reduce((m, e) => Math.max(m, e.in + e.cached + e.out), 0)
 
   const { data: sessionList } = useQuery({
     queryKey: [ID, 'sessions'],
@@ -1227,15 +1229,29 @@ function TokenPane() {
                   const total = m.in + m.cached + m.out
                   const mCost = m.cost > 0 ? (m.cost * EUR_RATE).toFixed(2) + ' €' : null
                   const tip = m.sessions.size === 1 ? '1 Sitzung' : `${m.sessions.size} Sitzungen`
+                  // Relative-size bar behind the row (vs. the largest model
+                  // in view) — same visual as the session-table Out bars.
+                  // INLINE-STYLES (thin deco element, see AI-HELPER lesson).
+                  const bar = maxModelTotal > 0 && total > 0
+                    ? jsx('div', {
+                        style: {
+                          position: 'absolute', top: 3, bottom: 3, left: 0,
+                          borderRadius: 2,
+                          background: 'var(--ui-accent)', opacity: 0.1,
+                          width: Math.max(4, total / maxModelTotal * 100) + '%',
+                        },
+                      })
+                    : null
                   return jsxs('div', {
-                    className: 'flex items-center justify-between gap-2 px-2 py-1',
+                    className: 'relative flex items-center justify-between gap-2 px-2 py-1 overflow-hidden',
                     title: `${m.model}\nIn: ${fmtFull(m.in)} · ⚡: ${fmtFull(m.cached)} · Out: ${fmtFull(m.out)}\nGesamt: ${fmtFull(total)} Tokens · Calls: ${fmtFull(m.calls)} · ${tip}${mCost != null ? ` · Geschätzt: ${(m.cost * EUR_RATE).toFixed(2)} € (USD ${m.cost.toFixed(2)})` : (m.unpriced ? ' · kein Preis' : '')}`,
                     children: [
-                      jsxs('div', { className: 'flex items-baseline gap-1.5 min-w-0', children: [
+                      bar,
+                      jsxs('div', { className: 'relative z-10 flex items-baseline gap-1.5 min-w-0', children: [
                         jsx('span', { className: 'truncate font-medium', children: m.model }),
                         jsx('span', { className: 'text-[0.625rem] text-(--ui-text-quaternary) shrink-0', children: tip }),
                       ]}),
-                      jsxs('div', { className: 'flex items-center gap-2 shrink-0 tabular-nums text-(--ui-text-secondary)', children: [
+                      jsxs('div', { className: 'relative z-10 flex items-center gap-2 shrink-0 tabular-nums text-(--ui-text-secondary)', children: [
                         jsx('span', { title: `Gesamttokens: ${fmtFull(total)}`, children: fmt(total) }),
                         jsx('span', {
                           className: 'text-(--ui-text-quaternary) min-w-[3.5rem] text-right',
