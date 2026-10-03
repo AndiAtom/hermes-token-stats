@@ -825,6 +825,17 @@ function TokenPane() {
   const curSort = useValue(sortBy)
   const curDir = useValue(sortDir)
   const dayCollapse = useValue(collapsedDays)
+  // Day keys in view (for the collapse-all toggle in the header)
+  const dayKeys = []
+  {
+    const seen = new Set()
+    for (const r of rows) {
+      if (r.lastActive == null) continue
+      const k = dayKeyTs(r.lastActive)
+      if (!seen.has(k)) { seen.add(k); dayKeys.push(k) }
+    }
+  }
+  const allDaysCollapsed = dayKeys.length > 0 && dayKeys.every(k => dayCollapse[k])
   const sortedRows = (() => {
     if (curSort === 'activity') return rows // server order + day separators
     const val = SORTS[curSort].val
@@ -863,6 +874,24 @@ function TokenPane() {
                   className: 'text-[0.625rem] text-amber-500',
                   title: 'Ledger backend AND usage.history RPC unavailable — live sessions only.\nBackend: /root/.hermes/plugins/token-stats/ (plugin_api.py) + daemon: systemctl status token-stats-ledger',
                   children: 'live only' })
+              : null,
+            curSort === 'activity' && dayKeys.length > 0
+              ? jsx('button', {
+                  type: 'button',
+                  title: allDaysCollapsed
+                    ? 'Alle Tagesgruppen aufklappen'
+                    : 'Alle Tagesgruppen zuklappen (Summenzeilen bleiben sichtbar)',
+                  className: 'text-(--ui-text-quaternary) hover:bg-(--ui-stroke-secondary) rounded-sm px-1.5 py-0.5 text-[0.625rem] cursor-pointer mr-1',
+                  onClick: () => {
+                    if (allDaysCollapsed) collapsedDays.set({})
+                    else {
+                      const next = {}
+                      for (const k of dayKeys) next[k] = true
+                      collapsedDays.set(next)
+                    }
+                  },
+                  children: allDaysCollapsed ? '▸▸' : '▾▾',
+                }, 'collapseAll')
               : null,
             ...RANGE_PRESETS.map(p => jsx('button', {
               type: 'button',
