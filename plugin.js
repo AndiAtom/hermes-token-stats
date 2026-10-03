@@ -331,6 +331,10 @@ const collapsedDays = atom({})
 // breakdown table above the session list. Session-local, default off.
 const modelListOpen = atom(false)
 
+// Subagent list (footer toggle): same UX as the model list — bottom-pinned
+// breakdown over the active window. Session-local, default off.
+const subListOpen = atom(false)
+
 function toggleDayCollapse(key) {
   // Flip the RESOLVED state, not the raw override: default-collapsed
   // days (everything except today) have no entry yet, so a naive
@@ -579,7 +583,7 @@ function TokenChip() {
       jsxs('button', {
         type: 'button',
         className: 'inline-flex h-full items-center gap-1.5 px-1.5 text-[0.6875rem] text-(--ui-text-tertiary) tabular-nums cursor-pointer hover:text-(--ui-text-secondary)',
-        title: `Token Stats v4.3.2 · Click: configure display · drag header edges to resize pane columns${isPersisted ? ' · 📚 Known-Ledger values (monotonic)' : ''}\n\nInput: ${fmtFull(input)} · Cached: ${fmtFull(cached)}${hitPct != null ? ` (${hitPct}%)` : ''} · Output: ${fmtFull(out)} · Total: ${fmtFull(total)}`
+        title: `Token Stats v4.4.0 · Click: configure display · drag header edges to resize pane columns${isPersisted ? ' · 📚 Known-Ledger values (monotonic)' : ''}\n\nInput: ${fmtFull(input)} · Cached: ${fmtFull(cached)}${hitPct != null ? ` (${hitPct}%)` : ''} · Output: ${fmtFull(out)} · Total: ${fmtFull(total)}`
           + (ctxPct != null && ctxMax > 0 ? `\nContext: ${fmtFull(ctxUsed)} / ${fmtFull(ctxMax)} tokens (${ctxPct}%)` : '')
           + (cost != null ? `\nCost: ${(cost * EUR_RATE).toFixed(2)} €` : '')
           + (calls > 0 ? `\nAPI calls: ${fmtFull(calls)}` : ''),
@@ -760,6 +764,24 @@ function TokenPane() {
   // Scale for the per-model relative bars (largest model in view = 100%)
   const maxModelTotal = modelAggList.reduce((m, e) => Math.max(m, e.in + e.cached + e.out), 0)
 
+  // Subagent rows over the active window (ledger sessions flagged by the
+  // backend via source='subagent' / $._delegate_from). Same display
+  // semantics as the model list: known counters (already max'd with the
+  // ledger's live-db snapshot per row inside the merge above).
+  const subRows = histSessions
+    .filter(s => s.is_subagent)
+    .map(s => ({
+      id: s.id,
+      title: s.title || s.id.slice(0, 12),
+      parent: s.parent_session_id || null,
+      in: s.input_tokens || 0,
+      cached: s.cache_read_tokens || 0,
+      out: s.output_tokens || 0,
+      calls: s.api_call_count || 0,
+    }))
+  // Subagent scale for the relative bars (largest subagent = 100%)
+  const maxSubTotal = subRows.reduce((m, e) => Math.max(m, e.in + e.cached + e.out), 0)
+
   const { data: sessionList } = useQuery({
     queryKey: [ID, 'sessions'],
     queryFn: () => host.request('session.list', { limit: 200 }),
@@ -858,6 +880,7 @@ function TokenPane() {
   const curDir = useValue(sortDir)
   const dayCollapse = useValue(collapsedDays)
   const modelListOpenVal = useValue(modelListOpen)
+  const subListOpenVal = useValue(subListOpen)
   // Resolved collapse state: explicit override if set, else default
   // (today expanded, every other day collapsed)
   const todayKey = dayKeyDate(new Date())
@@ -1266,6 +1289,54 @@ function TokenPane() {
           })
         : null,
 
+      // Subagent breakdown (footer "N Subagenten" toggle). Same pattern as
+      // the model list: bottom-pinned, compact total-token rows with
+      // relative bars, breakdown in the tooltip.
+      subListOpenVal && histOk && subRows.length > 0
+        ? jsxs('div', {
+            className: 'shrink-0',
+            children: [
+              jsxs('div', {
+                className: 'flex items-center justify-between text-[0.625rem] text-(--ui-text-quaternary) mb-0.5 px-0.5',
+                children: [
+                  jsx('span', { className: 'uppercase', children: 'Subagenten' }),
+                  jsx('span', { className: 'tabular-nums', children: `${subRows.length} Subagent${subRows.length === 1 ? '' : 'en'}` }),
+                ],
+              }),
+              jsxs('div', {
+                className: 'rounded-md border border-(--ui-stroke-secondary) divide-y divide-(--ui-stroke-secondary)/50 max-h-40 overflow-auto',
+                children: subRows.map(sr => {
+                  const total = sr.in + sr.cached + sr.out
+                  const bar = maxSubTotal > 0 && total > 0
+                    ? jsx('div', {
+                        style: {
+                          position: 'absolute', top: 3, bottom: 3, left: 0,
+                          borderRadius: 2,
+                          background: 'var(--ui-accent)', opacity: 0.1,
+                          width: Math.max(4, total / maxSubTotal * 100) + '%',
+                        },
+                      })
+                    : null
+                  return jsxs('div', {
+                    className: 'relative flex items-center justify-between gap-2 px-2 py-1 overflow-hidden',
+                    title: `${sr.title}\n${sr.id}${sr.parent ? `\nParent: ${sr.parent}` : ''}\nIn: ${fmtFull(sr.in)} · ⚡: ${fmtFull(sr.cached)} · Out: ${fmtFull(sr.out)}\nGesamt: ${fmtFull(total)} Tokens · Calls: ${fmtFull(sr.calls)}`,
+                    children: [
+                      bar,
+                      jsxs('div', { className: 'relative z-10 flex items-baseline gap-1.5 min-w-0', children: [
+                        jsx('span', { className: 'truncate font-medium', children: sr.title }),
+                        sr.parent ? jsx('span', { className: 'text-[0.625rem] text-(--ui-text-quaternary) shrink-0', children: '↳ Parent' }) : null,
+                      ]}),
+                      jsxs('div', { className: 'relative z-10 flex items-center gap-2 shrink-0 tabular-nums text-(--ui-text-secondary)', children: [
+                        jsx('span', { title: `Gesamttokens: ${fmtFull(total)}`, children: fmt(total) }),
+                      ]}),
+                    ],
+                  }, sr.id)
+                }),
+              }),
+            ],
+          })
+        : null,
+
       // Footer: session/model counts + active calendar window. The model
       // count is a toggle for the per-model list above.
       jsxs('div', {
@@ -1284,6 +1355,21 @@ function TokenPane() {
             onClick: () => { modelListOpen.set(!modelListOpenVal) },
             children: `${modelAggList.length} Modell${modelAggList.length === 1 ? '' : 'e'}`,
           }, 'modelToggle'),
+          subRows.length > 0
+            ? [' · ',
+               jsxs('button', {
+                 type: 'button',
+                 title: subListOpenVal
+                   ? 'Subagenten-Liste zuklappen'
+                   : 'Subagenten-Liste aufklappen (delegierte Tasks im aktiven Fenster)',
+                 className: (subListOpenVal
+                   ? 'text-(--ui-text-secondary) font-medium'
+                   : 'hover:text-(--ui-text-secondary)') +
+                   ' cursor-pointer underline decoration-(--ui-stroke-secondary) decoration-dotted underline-offset-2',
+                 onClick: () => { subListOpen.set(!subListOpenVal) },
+                 children: `${subRows.length} Subagent${subRows.length === 1 ? '' : 'en'}`,
+               }, 'subToggle')]
+            : null,
           histOk ? ` · ${windowLabel(range)}` : '',
         ],
       }),
