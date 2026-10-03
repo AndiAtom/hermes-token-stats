@@ -372,11 +372,11 @@ function windowLabel(range) {
 }
 
 const EMPTY_MSG = {
-  day: 'Noch keine Sessions heute',
-  workweek: 'Keine Sessions in der Arbeitswoche (Mo–Fr)',
-  week: 'Keine Sessions in dieser Kalenderwoche',
-  month: 'Keine Sessions im laufenden Monat',
-  all: 'Noch keine Sessions im Ledger',
+  day: 'Noch keine Sitzungen heute',
+  workweek: 'Keine Sitzungen in der Arbeitswoche (Mo–Fr)',
+  week: 'Keine Sitzungen in dieser Kalenderwoche',
+  month: 'Keine Sitzungen im laufenden Monat',
+  all: 'Noch keine Sitzungen im Ledger',
 }
 
 // Per-day token totals over the window, for the mini histogram. A
@@ -912,8 +912,10 @@ function TokenPane() {
             }),
           })
         : null,
-      // Mini histogram: tokens per day over the active window
-      histOk && rows.length > 0
+      // Mini histogram: tokens per day over the active window.
+      // Skipped when the window spans a single day (1d view — one bar at
+      // 100% carries no information).
+      histOk && rows.length > 0 && histBuckets.length > 1
         ? jsx('div', {
             className: 'shrink-0',
             children: jsx('div', {
@@ -924,7 +926,7 @@ function TokenPane() {
                   const h = histMax ? Math.max(4, Math.round(b.tokens / histMax * 100)) : 0
                   return jsx('div', {
                     className: 'flex-1 flex flex-col justify-end h-full',
-                    title: `${dayLabel(b.key)} · ${fmt(b.tokens)} Tokens · ${b.sessions} Session${b.sessions === 1 ? '' : 'en'}`,
+                    title: `${dayLabel(b.key)} · ${fmt(b.tokens)} Tokens · ${b.sessions} Sitzung${b.sessions === 1 ? '' : 'en'}`,
                     children: jsx('div', {
                       className: 'w-full rounded-sm bg-(--ui-accent)' + (b.tokens === 0 ? '/30' : ''),
                       style: { height: (b.tokens === 0 ? 3 : h) + '%' },
@@ -1061,7 +1063,7 @@ function TokenPane() {
       // Footer: session/model counts + active calendar window
       jsx('div', {
         className: 'shrink-0 text-[0.625rem] text-(--ui-text-quaternary) text-center pt-1',
-        children: `${rows.length} Session${rows.length === 1 ? '' : 'en'} · ${histByModel.length} Modell${histByModel.length === 1 ? '' : 'e'}${histOk ? ' · ' + windowLabel(range) : ''}`,
+        children: `${rows.length} Sitzung${rows.length === 1 ? '' : 'en'} · ${histByModel.length} Modell${histByModel.length === 1 ? '' : 'e'}${histOk ? ' · ' + windowLabel(range) : ''}`,
       }),
     ]
   })
