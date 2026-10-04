@@ -2,8 +2,6 @@
 
 Hermes Desktop plugin: statusbar chip + pane for per-session token usage.
 
-**Private repo — personal setup for [AndiAtom](https://github.com/AndiAtom).**
-
 ## Features
 
 **Statusbar chip** (live readout of the focused session):
@@ -187,4 +185,4 @@ The gateway's `input` already **excludes** cached tokens
 
 ## License
 
-Private. All rights reserved.
+[MIT](LICENSE) — © 2026 Andreas Frede
