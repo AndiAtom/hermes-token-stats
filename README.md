@@ -133,6 +133,12 @@ node --test test_prices.mjs   # spot checks + normalization regressions
 Full coverage of all token-billed models on La Plateforme, cross-checked
 against the live `/v1/models` API:
 
+> **Your provider is missing?** The catalog tables currently cover Mistral,
+> OpenRouter and Nous (via the OpenRouter catalog). If you run models through
+> another provider and want correct cost estimates, **open an issue** — use the
+> *Provider pricing request* template. Provider tables are small, exact-match
+> additions are welcome (source must be the provider's own price list).
+
 | Family | Model | Input | Cached | Output |
 |---|---|---|---|---|
 | Premier | Mistral Large 3 (`mistral-large-latest`) | 0.50 | 0.05 | 1.50 |
