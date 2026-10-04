@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  /* ── Nord theme vars, resolved the way the desktop does (skin nord → styles.css) ── */
+  :root {
+    --ui-base: #ECEFF4;             /* foreground (Snow Storm) */
+    --ui-accent: #88C0D0;           /* Frost nord8 */
+    --card-bg: #2E3440;             /* Polar Night background */
+    --ui-text-secondary: color-mix(in srgb, var(--ui-base) 74%, transparent);
+    --ui-text-quaternary: color-mix(in srgb, var(--ui-base) 36%, transparent);
+    --ui-stroke-secondary: color-mix(in srgb, var(--ui-accent) 16%, color-mix(in srgb, var(--ui-base) 7%, transparent));
+    --amber-500: #f59e0b;
+  }
+  html, body { margin: 0; background: #2E3440; }
+  body {
+    font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    color: var(--ui-base);
+    font-size: 12px;
+    -webkit-font-smoothing: antialiased;
+  }
+  * { box-sizing: border-box; }
+
+  /* ── Tailwind utilities used by the pane (translated) ── */
+  .flex { display: flex; }
+  .h-full { height: 100%; }
+  .flex-col { flex-direction: column; }
+  .gap-2 { gap: 8px; }
+  .p-3 { padding: 12px; }
+  .text-xs { font-size: 12px; }
+  .overflow-hidden { overflow: hidden; }
+  .overflow-auto { overflow: auto; }
+  .flex-1 { flex: 1 1 0%; }
+  .min-h-0 { min-height: 0; }
+  .shrink-0 { flex-shrink: 0; }
+  .items-center { align-items: center; }
+  .items-end { align-items: flex-end; }
+  .items-baseline { align-items: baseline; }
+  .justify-between { justify-content: space-between; }
+  .font-medium { font-weight: 500; }
+  .text-sm { font-size: 14px; }
+  .text-\[0\.625rem\] { font-size: 10px; }
+  .text-\[0\.5rem\] { font-size: 8px; }
+  .text-base { font-size: 16px; }
+  .leading-none { line-height: 1; }
+  .mb-0\.5 { margin-bottom: 2px; }
+  .mb-1 { margin-bottom: 4px; }
+  .ml-1 { margin-left: 4px; }
+  .mr-1 { margin-right: 4px; }
+  .px-1 { padding-left: 4px; padding-right: 4px; }
+  .pl-1 { padding-left: 4px; }
+  .pr-2 { padding-right: 8px; }
+  .px-2 { padding-left: 8px; padding-right: 8px; }
+  .px-0\.5 { padding-left: 2px; padding-right: 2px; }
+  .py-0\.5 { padding-top: 2px; padding-bottom: 2px; }
+  .py-1 { padding-top: 4px; padding-bottom: 4px; }
+  .py-1\.5 { padding-top: 6px; padding-bottom: 6px; }
+  .py-4 { padding-top: 16px; padding-bottom: 16px; }
+  .px-1\.5 { padding-left: 6px; padding-right: 6px; }
+  .rounded-md { border-radius: 6px; }
+  .rounded-sm { border-radius: 2px; }
+  .rounded-full { border-radius: 9999px; }
+  .rounded-tl-sm { border-top-left-radius: 2px; }
+  .rounded-tr-sm { border-top-right-radius: 2px; }
+  .tabular-nums { font-variant-numeric: tabular-nums; }
+  .text-right { text-align: right; }
+  .text-left { text-align: left; }
+  .text-center { text-align: center; }
+  .uppercase { text-transform: uppercase; }
+  .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .min-w-0 { min-width: 0; }
+  .relative { position: relative; }
+  .absolute { position: absolute; }
+  .z-0 { z-index: 0; }
+  .z-10 { z-index: 10; }
+  .cursor-pointer { cursor: pointer; }
+  .select-none { user-select: none; }
+  .gap-1 { gap: 4px; }
+  .gap-1\.5 { gap: 6px; }
+  .gap-2\.app { gap: 8px; }
+  .gap-\[2px\] { gap: 2px; }
+  .h-8 { height: 32px; }
+  .h-full { height: 100%; }
+  .w-full { width: 100%; }
+  .w-2 { width: 8px; }
+  .flex-col { flex-direction: column; }
+  .justify-end { justify-content: flex-end; }
+  .flex-1c { flex: 1 1 0%; }
+  .max-h-40 { max-height: 160px; }
+  .pt-1 { padding-top: 4px; }
+  .inset-y-\[3px\] { top: 3px; bottom: 3px; }
+  .right-0 { right: 0; }
+  .left-0 { left: 0; }
+  .underline { text-decoration: underline; }
+  .decoration-dotted { text-decoration-style: dotted; }
+  .underline-offset-2 { text-underline-offset: 2px; }
+  .shrink { flex-shrink: 0; }
+
+  .text-secondary { color: var(--ui-text-secondary); }
+  .text-quaternary { color: var(--ui-text-quaternary); }
+  .text-accent { color: var(--ui-accent); }
+  .text-amber { color: var(--amber-500); }
+  .bg-accent { background: var(--ui-accent); }
+  .bg-accent-10 { background: color-mix(in srgb, var(--ui-accent) 10%, transparent); }
+  .bg-accent-30 { background: color-mix(in srgb, var(--ui-accent) 30%, transparent); }
+  .bg-card { background: #333B49; } /* mix(card-bg 4% toward base) ≈ sticky header over card */
+  .text-card { color: #2E3440; }
+  .border-b { border-bottom: 1px solid; }
+  .border-t { border-top: 1px solid; }
+  .border-l-2 { border-left: 2px solid; }
+  .border { border: 1px solid; }
+  .stroke-secondary { border-color: color-mix(in srgb, var(--ui-stroke-secondary) 50%, transparent); }
+  .stroke-secondary-full { border-color: var(--ui-stroke-secondary); }
+  .divide > * + * { border-top: 1px solid color-mix(in srgb, var(--ui-stroke-secondary) 50%, transparent); }
+
+  table { border-collapse: collapse; width: 100%; table-layout: fixed; }
+  th { font-weight: normal; }
+</style>
+</head>
+<body>
+<div id="pane" class="flex flex-col gap-2 p-3 text-xs overflow-hidden" style="width:380px; height:660px; background:#2E3440;">
+</div>
+
+<script>
+// ── Logic copied 1:1 from plugin.js (v4.4.0) ──────────────────────────
+const PRICES = {
+  'zai-glm-latest': { input: 1.40, cached: 0.14, output: 4.40 },
+  'mistral-small-latest': { input: 0.15, cached: 0.015, output: 0.60 },
+  'ministral-8b-latest': { input: 0.15, cached: 0.015, output: 0.15 },
+}
+const EUR_RATE = 0.85
+
+function estimateCost(u) {
+  if (!u) return null
+  const model = String(u.model || '').trim()
+  const p = PRICES[model]
+  if (!p) return null
+  const input = Number(u.input) || 0
+  const cached = Number(u.cache_read) || 0
+  const output = Number(u.output) || 0
+  if (!input && !cached && !output) return null
+  return (input * p.input + cached * p.cached + output * p.output) / 1_000_000
+}
+function fmt(n) {
+  if (n == null || isNaN(n)) return '—'
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M'
+  if (n >= 1_000) return (n / 1_000).toFixed(1) + 'k'
+  return String(n)
+}
+function fmtFull(n) {
+  if (n == null || isNaN(n)) return '—'
+  return n.toLocaleString('de-DE')
+}
+function fmtDate(ts) {
+  if (!ts) return ''
+  const d = new Date(ts * 1000)
+  return d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })
+}
+const _pad = (n) => String(n).padStart(2, '0')
+const dayKeyDate = (d) => d.getFullYear() + '-' + _pad(d.getMonth() + 1) + '-' + _pad(d.getDate())
+const dayKeyTs = (ts) => dayKeyDate(new Date(ts * 1000))
+function dayLabel(key) {
+  const now = new Date()
+  if (key === dayKeyDate(now)) return 'Heute'
+  if (key === dayKeyDate(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1))) return 'Gestern'
+  const [y, m, d] = key.split('-').map(Number)
+  return new Date(y, m - 1, d).toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' })
+}
+function windowLabel() {
+  return 'ab ' + new Date(new Date().getFullYear(), new Date().getMonth(), 1)
+    .toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })
+}
+
+// ── Sample data (window: 30d / running month) ─────────────────────────
+const NOW = Math.floor(Date.now() / 1000)
+const H = 3600
+const rows = [
+  { id: 's1', title: 'Tuwunel-Migration planen', lastActive: NOW - 0.4 * H, model: 'zai-glm-latest',
+    input: 84_000, cache_read: 1_930_000, output: 26_400, focused: true },
+  { id: 's2', title: 'Hindsight world-knowledge Tuning', lastActive: NOW - 2.1 * H, model: 'zai-glm-latest',
+    input: 121_000, cache_read: 3_410_000, output: 41_200, hadReset: true },
+  { id: 's3', title: 'Rufbereitschaft VPN-Check (Fr.)', lastActive: null, model: 'mistral-small-latest',
+    input: 6_200, cache_read: 48_000, output: 1_150, isLiveOnly: true },
+  { id: 's4', title: 'token-stats v4.4: Subagenten-Pane', lastActive: NOW - 26 * H, model: 'zai-glm-latest',
+    input: 212_000, cache_read: 5_080_000, output: 58_300 },
+  { id: 's5', title: 'AdGuard DoH-Upstream Ausfall', lastActive: NOW - 30 * H, model: 'zai-glm-latest',
+    input: 44_800, cache_read: 915_000, output: 12_600 },
+  { id: 's6', title: 'Dockhand-Stack-Transfer geplant', lastActive: NOW - 54 * H, model: 'zai-glm-latest',
+    input: 95_300, cache_read: 2_210_000, output: 33_100 },
+  { id: 's7', title: 'SearXNG Bot-Wall Analyse', lastActive: NOW - 61 * H, model: 'openai/gpt-6-astra-pro',
+    input: 8_400, cache_read: 61_000, output: 2_450 },
+  { id: 's8', title: 'Ledger Livegang + Baseline', lastActive: NOW - 78 * H, model: 'zai-glm-latest',
+    input: 308_000, cache_read: 8_720_000, output: 96_400 },
+  { id: 's9', title: 'K95 TimeSync Doku (EN)', lastActive: NOW - 82 * H, model: 'mistral-small-latest',
+    input: 12_100, cache_read: 129_000, output: 3_800 },
+]
+for (const r of rows) r.cost = estimateCost(r)
+
+// Collapsed-day state: default = today expanded, others collapsed;
+// explicit overrides demo the toggle: Gestern aufugeklappt, 02.10 + 01.10 zu.
+const todayKey = dayKeyDate(new Date())
+const isDayCollapsed = (k) => {
+  if (k === dayKeyTs(NOW - 26 * H)) return false   // Gestern: explicit open
+  if (k === todayKey) return false                 // Heute: default open
+  return true                                      // Mi., 01.10 + Do., 02.10: collapsed
+}
+
+// Day aggregates
+const dayAgg = {}
+for (const row of rows) {
+  if (row.lastActive == null) continue
+  const k = dayKeyTs(row.lastActive)
+  const a = dayAgg[k] || (dayAgg[k] = { in: 0, cached: 0, out: 0, cost: 0, unpriced: 0 })
+  a.in += row.input
+  a.cached += row.cache_read
+  a.out += row.output
+  if (row.cost != null) a.cost += row.cost
+  else if (row.input + row.output > 0) a.unpriced++
+}
+
+// Grand totals
+let grandInput = 0, grandCached = 0, grandOutput = 0, grandCost = 0, unpricedRows = 0
+for (const r of rows) {
+  grandInput += r.input; grandCached += r.cache_read; grandOutput += r.output
+  if (r.cost != null) grandCost += r.cost
+  else if (r.input + r.output > 0) unpricedRows++
+}
+
+// Histogram (month window → one bucket per day of month so far)
+const histBuckets = (() => {
+  const start = new Date(); start.setDate(1); start.setHours(0, 0, 0, 0)
+  const buckets = []
+  for (let d = new Date(start); d <= new Date(); d.setDate(d.getDate() + 1)) {
+    buckets.push({ key: dayKeyDate(d), tokens: 0, sessions: 0 })
+  }
+  const byKey = {}
+  for (const b of buckets) byKey[b.key] = b
+  for (const r of rows) {
+    const k = r.lastActive != null ? dayKeyTs(r.lastActive) : todayKey
+    const b = byKey[k] || byKey[todayKey]
+    b.tokens += r.input + r.cache_read + r.output
+    b.sessions++
+  }
+  return buckets
+})()
+const histMax = histBuckets.reduce((m, b) => Math.max(m, b.tokens), 0)
+
+// Model aggregate (footer list, open)
+const modelAgg = {}
+for (const r of rows) {
+  const m = modelAgg[r.model] || (modelAgg[r.model] = { model: r.model, in: 0, cached: 0, out: 0, calls: 0, sessions: new Set(), cost: 0, unpriced: false })
+  m.in += r.input; m.cached += r.cache_read; m.out += r.output
+  m.sessions.add(r.id)
+  if (r.cost != null) m.cost += r.cost; else m.unpriced = true
+  m.calls += Math.max(3, Math.round((r.input + r.output) / 9000))
+}
+const modelAggList = Object.values(modelAgg).sort((a, b) => (b.in + b.cached + b.out) - (a.in + a.cached + a.out))
+const maxModelTotal = modelAggList.reduce((m, e) => Math.max(m, e.in + e.cached + e.out), 0)
+
+// Subagent rows (window has 2, list open)
+const subRows = [
+  { id: 'sub1', title: 'Tuwunel-Doku extrahieren', parent: true, in: 38_000, cached: 402_000, out: 9_100, calls: 12 },
+  { id: 'sub2', title: 'git-history Scan k95', parent: false, in: 21_400, cached: 188_000, out: 4_300, calls: 7 },
+]
+const maxSubTotal = subRows.reduce((m, e) => Math.max(m, e.in + e.cached + e.out), 0)
+
+const W = [48, 14, 14, 13, 11]  // persisted column widths
+
+// ── Render (structure 1:1 from TokenPane) ─────────────────────────────
+const pane = document.getElementById('pane')
+const el = (tag, cls, style, children, title) => {
+  const n = document.createElement(tag)
+  if (cls) n.className = cls
+  if (style) n.setAttribute('style', style)
+  if (title) n.setAttribute('title', title)
+  if (children != null) n.append(...[children].flat(2).filter(c => c != null))
+  return n
+}
+const txt = (t) => document.createTextNode(String(t))
+
+const header = el('div', 'flex items-center justify-between shrink-0', null, [
+  el('span', 'font-medium text-sm', null, txt('Token Stats')),
+  el('div', 'flex items-center gap-1.5', null, [
+    el('button', null, 'color:var(--ui-text-quaternary);cursor:pointer;font-size:10px;margin-right:4px;padding:2px 6px;', txt('▾▾')),
+    ...['1d', '5d', '7d', '30d', '∞'].map(l => {
+      const active = l === '30d'
+      const b = el('button', null,
+        (active ? 'background:var(--ui-accent);color:#2E3440;' : 'color:var(--ui-text-quaternary);') +
+        'cursor:pointer;font-size:10px;padding:2px 6px;border-radius:2px;', txt(l))
+      return b
+    }),
+  ]),
+])
+
+// Summary card
+const summaryRow = el('tr', 'text-quaternary text-[0.625rem] uppercase', null, [
+  el('td', null, `width:${W[0]}%`, txt('Total')),
+  el('td', 'text-right px-1 tabular-nums font-medium', `width:${W[1]}%`, txt(fmt(grandInput))),
+  el('td', 'text-right px-1 tabular-nums font-medium text-accent', `width:${W[2]}%`,
+    txt(fmt(grandCached))),
+  el('td', 'text-right px-1 tabular-nums font-medium', `width:${W[3]}%`, txt(fmt(grandOutput))),
+  el('td', 'text-right pl-1 tabular-nums font-medium', `width:${W[4]}%`,
+    txt((unpricedRows > 0 ? '≈ ' : '') + (grandCost * EUR_RATE).toFixed(2) + ' €')),
+])
+const summary = el('div', 'shrink-0 rounded-md border stroke-secondary-full px-2 py-1.5', null,
+  el('table', null, null, el('tbody', null, null, summaryRow)))
+
+// Cache-hit bar (INLINE styles, as in the plugin)
+const cacheHitPct = Math.round(grandCached / (grandInput + grandCached) * 100)
+const cacheBar = el('div', 'shrink-0', 'margin-top:-2px;padding-left:8px;padding-right:8px;', [
+  el('div', 'flex items-center justify-between text-[0.625rem] text-quaternary mb-0.5', null, [
+    txt('⚡ Cache-Hit'),
+    el('span', 'tabular-nums', null, txt(cacheHitPct + '%')),
+  ]),
+  el('div', null, 'height:3px;width:100%;border-radius:9999px;overflow:hidden;background:var(--ui-stroke-secondary);display:flex;',
+    el('div', null, `height:100%;background:var(--ui-accent);width:${Math.min(100, cacheHitPct)}%;`)),
+])
+
+// Histogram
+const histCard = el('div', 'shrink-0', null,
+  el('div', 'rounded-md border stroke-secondary-full px-2 py-1.5', null,
+    el('div', 'flex items-end gap-[2px] h-8', null,
+      histBuckets.map(b => {
+        const h = histMax ? Math.max(4, Math.round(b.tokens / histMax * 100)) : 0
+        const inner = el('div', null,
+          `width:100%;border-radius:2px;background:var(--ui-accent);height:${b.tokens === 0 ? 3 : h}%;` +
+          (b.tokens === 0 ? 'opacity:0.3;' : ''),
+        )
+        return el('div', 'flex-1c flex flex-col justify-end h-full', null, inner)
+      }))))
+
+// Session table
+const thead = el('thead', null, null, el('tr', 'text-quaternary text-[0.625rem] uppercase', null, [
+  el('th', 'text-left py-1 pr-2 truncate relative', `width:${W[0]}%`, [txt('Session')]),
+  el('th', 'text-right py-1 px-1 relative', `width:${W[1]}%`, [txt('In')]),
+  el('th', 'text-right py-1 px-1 relative', `width:${W[2]}%`, [txt('⚡')]),
+  el('th', 'text-right py-1 px-1 relative', `width:${W[3]}%`, [txt('Out')]),
+  el('th', 'text-right py-1 pl-1 relative', `width:${W[4]}%`, [txt('💰')]),
+]))
+const tbody = document.createElement('tbody')
+const maxOut = rows.reduce((m, r) => Math.max(m, r.output), 0)
+let lastDay = null
+for (const row of rows) {
+  if (row.lastActive != null) {
+    const key = dayKeyTs(row.lastActive)
+    if (key !== lastDay) {
+      lastDay = key
+      const a = dayAgg[key]
+      const daySessions = rows.filter(r => r.lastActive != null && dayKeyTs(r.lastActive) === key).length
+      const collapsed = isDayCollapsed(key)
+      tbody.append(el('tr', 'text-[0.625rem] text-quaternary border-b stroke-secondary cursor-pointer select-none', null, [
+        el('td', 'py-1 pr-2 font-medium', null, [
+          el('span', 'inline-block w-2 mr-1 text-[0.5rem] leading-none', null, txt(collapsed ? '▸' : '▾')),
+          txt(dayLabel(key)),
+          collapsed ? el('span', 'ml-1 font-normal', null, txt(`(${daySessions})`)) : null,
+        ]),
+        el('td', 'text-right px-1 py-1 tabular-nums', null, txt(fmt(a.in))),
+        el('td', 'text-right px-1 py-1 tabular-nums text-accent', null, txt(fmt(a.cached))),
+        el('td', 'text-right px-1 py-1 tabular-nums', null, txt(fmt(a.out))),
+        el('td', 'text-right pl-1 py-1 tabular-nums', null,
+          txt(a.cost > 0 ? (a.unpriced > 0 ? '≈ ' : '') + (a.cost * EUR_RATE).toFixed(2) + ' €' : '—')),
+      ]))
+    }
+  }
+  if (row.lastActive != null && isDayCollapsed(dayKeyTs(row.lastActive))) continue
+  const cost = row.cost
+  const trCls = row.focused ? 'bg-accent-10 border-l-2 border stroke-secondary-full' : 'border-b stroke-secondary'
+  const outBar = maxOut > 0 && row.output > 0
+    ? el('div', 'absolute inset-y-[3px] right-0 rounded-sm bg-accent-10 z-0',
+        `width:${Math.max(4, (row.output / maxOut) * 100)}%;`)
+    : null
+  tbody.append(el('tr', trCls, row.focused ? 'border-left-color:var(--ui-accent)' : null, [
+    el('td', 'py-1 pr-2 truncate', null, [
+      row.hadReset ? el('span', 'text-amber mr-1', null, txt('⚠')) : null,
+      row.isLiveOnly ? el('span', 'text-quaternary mr-1', null, txt('●')) : null,
+      txt(row.title),
+    ]),
+    el('td', 'text-right py-1 px-1 tabular-nums text-secondary', null, txt(fmt(row.input))),
+    el('td', 'text-right py-1 px-1 tabular-nums', null,
+      row.cache_read > 0
+        ? el('span', 'text-accent', null, txt(fmt(row.cache_read)))
+        : el('span', 'text-quaternary', null, txt('—'))),
+    el('td', 'relative text-right py-1 px-1 tabular-nums text-secondary', null, [
+      outBar,
+      el('span', 'relative z-10', null, txt(fmt(row.output))),
+    ]),
+    el('td', 'text-right py-1 pl-1 tabular-nums text-quaternary', null,
+      cost != null ? txt((cost * EUR_RATE).toFixed(2) + ' €') : el('span', 'text-quaternary', null, txt('—'))),
+  ]))
+}
+const table = el('table', null, null, [thead, tbody])
+const listWrap = el('div', 'flex-1 min-h-0 overflow-auto', null, table)
+
+// Model list (open)
+const modelList = el('div', 'shrink-0', null, [
+  el('div', 'flex items-center justify-between text-[0.625rem] text-quaternary mb-0.5 px-0.5', null, [
+    el('span', 'uppercase', null, txt('Modelle')),
+    el('span', 'tabular-nums', null, txt(`${modelAggList.length} Modelle`)),
+  ]),
+  el('div', 'rounded-md border stroke-secondary-full divide max-h-40 overflow-auto', null,
+    modelAggList.map(m => {
+      const total = m.in + m.cached + m.out
+      const mCost = m.cost > 0 ? (m.cost * EUR_RATE).toFixed(2) + ' €' : null
+      const tip = `${m.sessions.size} ${m.sessions.size === 1 ? 'Sitzung' : 'Sitzungen'}`
+      const bar = maxModelTotal > 0 && total > 0
+        ? el('div', null,
+            `position:absolute;top:3px;bottom:3px;left:0;border-radius:2px;background:var(--ui-accent);opacity:0.1;width:${Math.max(4, total / maxModelTotal * 100)}%;`)
+        : null
+      return el('div', 'relative flex items-center justify-between gap-2 px-2 py-1 overflow-hidden', null, [
+        bar,
+        el('div', 'relative z-10 flex items-baseline gap-1.5 min-w-0', null, [
+          el('span', 'truncate font-medium', null, txt(m.model)),
+          el('span', 'text-[0.625rem] text-quaternary shrink', null, txt(tip)),
+        ]),
+        el('div', 'relative z-10 flex items-center gap-1 shrink tabular-nums text-secondary', 'gap:8px', [
+          el('span', null, null, txt(fmt(total))),
+          el('span', 'text-quaternary min-w-0 text-right', 'min-width:3.5rem',
+            txt(mCost != null ? (m.unpriced ? '≈ ' : '') + mCost : '—')),
+        ]),
+      ])
+    })),
+])
+
+// Subagent list (open)
+const subList = el('div', 'shrink-0', null, [
+  el('div', 'flex items-center justify-between text-[0.625rem] text-quaternary mb-0.5 px-0.5', null, [
+    el('span', 'uppercase', null, txt('Subagenten')),
+    el('span', 'tabular-nums', null, txt(`${subRows.length} Subagenten`)),
+  ]),
+  el('div', 'rounded-md border stroke-secondary-full divide max-h-40 overflow-auto', null,
+    subRows.map(sr => {
+      const total = sr.in + sr.cached + sr.out
+      const bar = maxSubTotal > 0 && total > 0
+        ? el('div', null,
+            `position:absolute;top:3px;bottom:3px;left:0;border-radius:2px;background:var(--ui-accent);opacity:0.1;width:${Math.max(4, total / maxSubTotal * 100)}%;`)
+        : null
+      return el('div', 'relative flex items-center justify-between gap-2 px-2 py-1 overflow-hidden', null, [
+        bar,
+        el('div', 'relative z-10 flex items-baseline gap-1.5 min-w-0', null, [
+          el('span', 'truncate font-medium', null, txt(sr.title)),
+          sr.parent ? el('span', 'text-[0.625rem] text-quaternary shrink', null, txt('↳ Parent')) : null,
+        ]),
+        el('div', 'relative z-10 flex items-center shrink tabular-nums text-secondary', 'gap:8px', [
+          el('span', null, null, txt(fmt(total))),
+        ]),
+      ])
+    })),
+])
+
+// Footer
+const footer = el('div', 'shrink-0 text-[0.625rem] text-quaternary text-center pt-1', null, [
+  txt(`${rows.length} Sitzungen · `),
+  el('button', 'text-secondary font-medium cursor-pointer underline decoration-dotted underline-offset-2',
+    'border-bottom:none;text-decoration-color:var(--ui-stroke-secondary)', txt(`${modelAggList.length} Modelle`)),
+  txt(' · '),
+  el('button', 'text-secondary font-medium cursor-pointer underline decoration-dotted underline-offset-2',
+    'text-decoration-color:var(--ui-stroke-secondary)', txt(`${subRows.length} Subagenten`)),
+  txt(` · ${windowLabel()}`),
+])
+
+pane.append(header, summary, cacheBar, histCard, listWrap, modelList, subList, footer)
+</script>
+</body>
+</html>

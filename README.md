@@ -32,9 +32,21 @@ summary row stays column-aligned. Your widths persist across app restarts via
 
 ![Pane example with persistent history, aggregate summary and focused-session highlight](docs/pane-example.png)
 
-*Example rendering with sample data — focused session highlighted with the
-accent left border, `●` marks a live-only session, `≈` on the total indicates
-unpriced rows excluded, `—` marks missing values (unpriced model / no cache).*
+*Example rendering with sample data (Nord theme): calendar range presets
+(1d/5d/7d/30d/∞, 30d active), grand-total summary aligned to the table
+columns, ⚡ cache-hit bar, mini histogram (tokens per day over the window),
+collapsible day-group separator rows with per-day totals, focused session
+highlighted with the accent left border. `●` marks a live-only session, `⚠`
+a ledger-recorded DB reset, `≈` on totals indicates unpriced rows excluded,
+`—` marks missing values (unpriced model / no cache). The footer toggles open
+the per-model and per-subagent breakdown lists (bottom-pinned, with relative
+size bars).*
+
+> The screenshot is generated from `docs/pane-mockup.html` — a standalone
+> 1:1 mockup of the pane's render logic with sample data (the live pane
+> cannot be screenshotted headlessly; the desktop app ships no CDP port).
+> Regenerate: render the HTML in a browser at 380px width, device pixel
+> ratio 2, and capture the `#pane` element.
 
 ## Install
 
