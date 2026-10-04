@@ -19,16 +19,25 @@ Every metric is toggleable via a click menu on the chip (popover, ●/○ state)
 the selection persists via `ctx.storage` (`hermes.plugin.token-stats.chipShow`)
 across app restarts. At least one metric stays visible — hiding all is blocked.
 
-**Pane** (`panes` area): table of all recent sessions with per-session token
-counts, cache read, context fill and totals, plus a grand aggregate summary.
-Seeded from `session.info` events, kept live via `session.usage` /
-`message.complete`.
-
-**Drag-resizable columns (v3.9)**: grab the right edge of any header cell
-(except the last) and drag — the neighbor column gives/takes the space, widths
-are percentage-based (sum always 100%, min 5% per column), and the aggregate
-summary row stays column-aligned. Your widths persist across app restarts via
-`ctx.storage` (`hermes.plugin.token-stats.colWidths`).
+**Pane** (`panes` area): per-window token history for all sessions —
+known-ledger data via `ctx.rest` (fallback `usage.history` RPC, then
+live-only). Since v4.4:
+- **Calendar range presets**: 1d (today), 5d (Mon–Fri workweek), 7d (calendar
+  week), 30d (running month), ∞ — buttons in the pane header
+- **Grand-total summary** aligned to the table columns, with a ⚡ cache-hit
+  bar (share of prompt tokens served from cache)
+- **Mini histogram**: tokens per day over the window (skipped on 1d — a
+  single bar carries no information)
+- **Collapsible day groups** with per-day totals; today expanded by default
+- **Per-model and per-subagent breakdown lists** (footer toggles,
+  bottom-pinned, with relative size bars)
+- **Drag-resizable columns**: grab the right edge of any header cell
+  (except the last) — widths persist across app restarts via
+  `ctx.storage` (`hermes.plugin.token-stats.colWidths`)
+- Sortable columns (activity/input/⚡/out/cost), focused session
+  highlighted with the accent left border, `⚠` marks ledger-recorded
+  DB resets (anomaly events), `●` live-only sessions, `≈` on totals =
+  unpriced rows excluded, `—` = missing values
 
 ![Pane example with persistent history, aggregate summary and focused-session highlight](docs/pane-example.png)
 
