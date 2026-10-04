@@ -85,7 +85,9 @@ Then in the app: ⌘K → **Reload desktop plugins**.
 token-stats-ledger daemon ──15s read-only poll──▶ ~/.hermes/state.db
         │  delta engine: known = monotonic, never drops
         ▼
-/root/token-stats-ledger/<profile>/ledger.db
+~/.token-stats-ledger/<profile>/ledger.db
+(the daemon's `LEDGER_BASE` default; the path in the data-flow diagram is
+that daemon's own default, override via `LEDGER_BASE` env).
         │  plugin backend (ctx.rest namespace /api/plugins/token-stats/)
         ▼
 plugin.js  ├─ Chip:  known (usePersistedUsage) ──┐

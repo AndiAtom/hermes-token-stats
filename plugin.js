@@ -1439,7 +1439,7 @@ function TokenPane() {
             histOk === false
               ? jsx('span', {
                   className: 'text-[0.625rem] text-amber-500',
-                  title: 'Ledger backend AND usage.history RPC unavailable — live sessions only.\nBackend: /root/.hermes/plugins/token-stats/ (plugin_api.py) + daemon: systemctl status token-stats-ledger',
+                  title: 'Ledger backend AND usage.history RPC unavailable — live sessions only.\nBackend: ~/.hermes/plugins/token-stats/ (plugin_api.py) + daemon: systemctl status token-stats-ledger',
                   children: 'live only' })
               : null,
             curSort === 'activity' && dayKeys.length > 0

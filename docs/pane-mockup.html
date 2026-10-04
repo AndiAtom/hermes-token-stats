@@ -176,23 +176,23 @@ function windowLabel() {
 const NOW = Math.floor(Date.now() / 1000)
 const H = 3600
 const rows = [
-  { id: 's1', title: 'Tuwunel-Migration planen', lastActive: NOW - 0.4 * H, model: 'zai-glm-latest',
+  { id: 's1', title: 'Server-Migration planen', lastActive: NOW - 0.4 * H, model: 'zai-glm-latest',
     input: 84_000, cache_read: 1_930_000, output: 26_400, focused: true },
-  { id: 's2', title: 'Hindsight world-knowledge Tuning', lastActive: NOW - 2.1 * H, model: 'zai-glm-latest',
+  { id: 's2', title: 'RAG-Pipeline Tuning', lastActive: NOW - 2.1 * H, model: 'zai-glm-latest',
     input: 121_000, cache_read: 3_410_000, output: 41_200, hadReset: true },
-  { id: 's3', title: 'Rufbereitschaft VPN-Check (Fr.)', lastActive: null, model: 'mistral-small-latest',
+  { id: 's3', title: 'VPN-Check vor Wochenende', lastActive: null, model: 'mistral-small-latest',
     input: 6_200, cache_read: 48_000, output: 1_150, isLiveOnly: true },
   { id: 's4', title: 'token-stats v4.4: Subagenten-Pane', lastActive: NOW - 26 * H, model: 'zai-glm-latest',
     input: 212_000, cache_read: 5_080_000, output: 58_300 },
-  { id: 's5', title: 'AdGuard DoH-Upstream Ausfall', lastActive: NOW - 30 * H, model: 'zai-glm-latest',
+  { id: 's5', title: 'DNS-Resolver Ausfallanalyse', lastActive: NOW - 30 * H, model: 'zai-glm-latest',
     input: 44_800, cache_read: 915_000, output: 12_600 },
-  { id: 's6', title: 'Dockhand-Stack-Transfer geplant', lastActive: NOW - 54 * H, model: 'zai-glm-latest',
+  { id: 's6', title: 'Docker-Stack-Migration geplant', lastActive: NOW - 54 * H, model: 'zai-glm-latest',
     input: 95_300, cache_read: 2_210_000, output: 33_100 },
-  { id: 's7', title: 'SearXNG Bot-Wall Analyse', lastActive: NOW - 61 * H, model: 'openai/gpt-6-astra-pro',
+  { id: 's7', title: 'Bot-Wall Analyse (Fremdmodell)', lastActive: NOW - 61 * H, model: 'openai/gpt-6-astra-pro',
     input: 8_400, cache_read: 61_000, output: 2_450 },
-  { id: 's8', title: 'Ledger Livegang + Baseline', lastActive: NOW - 78 * H, model: 'zai-glm-latest',
+  { id: 's8', title: 'Ledger-Livegang + Baseline', lastActive: NOW - 78 * H, model: 'zai-glm-latest',
     input: 308_000, cache_read: 8_720_000, output: 96_400 },
-  { id: 's9', title: 'K95 TimeSync Doku (EN)', lastActive: NOW - 82 * H, model: 'mistral-small-latest',
+  { id: 's9', title: 'Zeit-Sync Doku (EN)', lastActive: NOW - 82 * H, model: 'mistral-small-latest',
     input: 12_100, cache_read: 129_000, output: 3_800 },
 ]
 for (const r of rows) r.cost = estimateCost(r)
@@ -260,8 +260,8 @@ const maxModelTotal = modelAggList.reduce((m, e) => Math.max(m, e.in + e.cached 
 
 // Subagent rows (window has 2, list open)
 const subRows = [
-  { id: 'sub1', title: 'Tuwunel-Doku extrahieren', parent: true, in: 38_000, cached: 402_000, out: 9_100, calls: 12 },
-  { id: 'sub2', title: 'git-history Scan k95', parent: false, in: 21_400, cached: 188_000, out: 4_300, calls: 7 },
+  { id: 'sub1', title: 'Doku extrahieren', parent: true, in: 38_000, cached: 402_000, out: 9_100, calls: 12 },
+  { id: 'sub2', title: 'Git-History Scan', parent: false, in: 21_400, cached: 188_000, out: 4_300, calls: 7 },
 ]
 const maxSubTotal = subRows.reduce((m, e) => Math.max(m, e.in + e.cached + e.out), 0)
 
