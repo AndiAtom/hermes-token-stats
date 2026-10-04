@@ -185,4 +185,4 @@ The gateway's `input` already **excludes** cached tokens
 
 ## License
 
-[MIT](LICENSE) — © 2026 Andreas Frede
+[MIT](LICENSE) — © 2026 AndiAtom
