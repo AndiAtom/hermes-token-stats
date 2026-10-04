@@ -103,9 +103,35 @@ with a recorded DB-reset anomaly.
 
 `cost_usd` never arrives from the gateway for `custom:` providers
 (`billing_mode=unknown`, `estimated_cost_usd` stays 0.0), so the plugin prices
-locally in a labeled `PRICES` map (USD per 1M tokens). Full coverage of all
-token-billed models on La Plateforme, cross-checked against the live
-`/v1/models` API (53 models, 2026-09-19):
+locally. **v4.5.0: provider-aware three-level lookup** — the estimate depends
+on WHERE a model ran, not only on its name:
+
+1. `PRICES_PROVIDER[billing_provider][model]` — exact provider match
+2. `PRICES[model]` — model-only fallback (provider unknown/other)
+3. `null` → pane shows `—` — never a fabricated number
+
+The `billing_provider` comes from the ledger backend (`model_usage` rows carry
+their grain's provider; session rows carry state.db's). Provider keys match
+**exactly** (`openrouter`, `nous`) — `custom:mistral` deliberately falls through
+to the model-only path, because a custom provider relay can bill differently.
+
+| Table | Source | Scope |
+|---|---|---|
+| `PRICES` | <https://docs.mistral.ai/inference/pricing> (verified 2026-09-19) | Mistral-hosted models + fixed aliases, 41 entries |
+| `PRICES_OPENROUTER` | `openrouter.ai/api/v1/models` (generated 2026-10-04) | 459 curated models — text-in/text-out, priced or free, not expired; OR routing models excluded (no own price) |
+| `PRICES_PROVIDER.nous` | OpenRouter catalog (Nous publishes no machine-readable list) | same table, separately overridable when Nous' own pricing deviates |
+
+**Regeneration** — when OpenRouter prices shift, regenerate the catalog table
+in two minutes:
+
+```bash
+python3 scripts/gen_prices_openrouter.py > /tmp/prices_or.js
+# replace the marked PRICES_OPENROUTER block in plugin.js with the output
+node --test test_prices.mjs   # spot checks + normalization regressions
+```
+
+Full coverage of all token-billed models on La Plateforme, cross-checked
+against the live `/v1/models` API:
 
 | Family | Model | Input | Cached | Output |
 |---|---|---|---|---|
