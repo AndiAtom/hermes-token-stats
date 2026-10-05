@@ -1,6 +1,8 @@
 /**
  * Token Stats — statusbar chip + pane showing per-session token usage.
  *
+ * @version v4.6.4
+ *
  * Chip: compact live readout of the focused session. Every metric (tokens,
  * cache, context, cost, calls) is toggleable via a click menu on the chip;
  * the selection persists via ctx.storage across app restarts.
