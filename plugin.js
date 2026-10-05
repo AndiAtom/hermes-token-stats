@@ -1582,22 +1582,35 @@ function TokenPane() {
                   jsx('button', {
                     type: 'button',
                     title: 'Balkenhöhe = Tokens pro Tag',
-                    // Selected: subtle accent TINT (emoji can't be recolored —
-                    // a solid accent bg drowns it; /15 keeps the glyph readable
-                    // while still marking the active state).
+                    // Selected: subtle accent tint. INLINE STYLES — the runtime's
+                    // utility generation proved unreliable for exotic class sets
+                    // (opacity-modified CSS-var utilities may not paint at all;
+                    // lesson from the cache-hit bar). color-mix is supported by
+                    // the app's Chromium. Emoji can't be recolored — a 15% tint
+                    // keeps the glyph readable while marking the active state.
                     className: (histMetricVal !== 'cost'
-                      ? 'bg-(--ui-accent)/15 text-(--ui-accent) font-medium'
+                      ? ''
                       : 'text-(--ui-text-quaternary) hover:bg-(--ui-stroke-secondary)') +
                       ' rounded-sm px-1 py-0 text-[0.625rem] cursor-pointer',
+                    style: histMetricVal !== 'cost' ? {
+                      background: 'color-mix(in srgb, var(--ui-accent) 15%, transparent)',
+                      color: 'var(--ui-accent)',
+                      fontWeight: 500,
+                    } : undefined,
                     onClick: () => { histMetric.set('tokens') },
                     children: '🪙' }, 'histTok'),
                   jsx('button', {
                     type: 'button',
                     title: 'Balkenhöhe = geschätzte Kosten (PAYG-Äquivalent) pro Tag',
                     className: (histMetricVal === 'cost'
-                      ? 'bg-(--ui-accent)/15 text-(--ui-accent) font-medium'
+                      ? ''
                       : 'text-(--ui-text-quaternary) hover:bg-(--ui-stroke-secondary)') +
                       ' rounded-sm px-1 py-0 text-[0.625rem] cursor-pointer',
+                    style: histMetricVal === 'cost' ? {
+                      background: 'color-mix(in srgb, var(--ui-accent) 15%, transparent)',
+                      color: 'var(--ui-accent)',
+                      fontWeight: 500,
+                    } : undefined,
                     onClick: () => { histMetric.set('cost') },
                     children: '€' }, 'histCost'),
                 ]}),
