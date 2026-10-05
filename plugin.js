@@ -1096,7 +1096,7 @@ function TokenChip() {
       jsxs('button', {
         type: 'button',
         className: 'inline-flex h-full items-center gap-1.5 px-1.5 text-[0.6875rem] text-(--ui-text-tertiary) tabular-nums cursor-pointer hover:text-(--ui-text-secondary)',
-        title: `Token Stats v4.6.3 · Click: configure display · drag header edges to resize pane columns${isPersisted ? ' · 📚 Known-Ledger values (monotonic)' : ''}\n\nInput: ${fmtFull(input)} · Cached: ${fmtFull(cached)}${hitPct != null ? ` (${hitPct}%)` : ''} · Output: ${fmtFull(out)} · Total: ${fmtFull(total)}`
+        title: `Token Stats v4.6.4 · Click: configure display · drag header edges to resize pane columns${isPersisted ? ' · 📚 Known-Ledger values (monotonic)' : ''}\n\nInput: ${fmtFull(input)} · Cached: ${fmtFull(cached)}${hitPct != null ? ` (${hitPct}%)` : ''} · Output: ${fmtFull(out)} · Total: ${fmtFull(total)}`
           + (ctxPct != null && ctxMax > 0 ? `\nContext: ${fmtFull(ctxUsed)} / ${fmtFull(ctxMax)} tokens (${ctxPct}%)` : '')
           + (cost != null ? `\nCost: ${(cost * EUR_RATE).toFixed(2)} €` : '')
           + (calls > 0 ? `\nAPI calls: ${fmtFull(calls)}` : ''),
@@ -1751,8 +1751,14 @@ function TokenPane() {
                       // the desktop runtime (same lesson as cache-hit bar).
                       const outBar = maxOut > 0 && (u.output || 0) > 0
                         ? jsx('div', {
-                            className: 'absolute inset-y-[3px] right-0 rounded-sm z-0',
+                            // Geometry INLINE as well — inset-y-[3px] is an
+                            // arbitrary-value utility; when the runtime doesn't
+                            // generate it, the absolute div has top/bottom unset
+                            // → height 0 → invisible regardless of background.
+                            className: 'absolute right-0 rounded-sm z-0',
                             style: {
+                              top: 3,
+                              bottom: 3,
                               width: Math.max(4, (u.output / maxOut) * 100) + '%',
                               background: 'color-mix(in srgb, var(--ui-accent) 10%, transparent)',
                             },
