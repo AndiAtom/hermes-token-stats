@@ -1582,8 +1582,11 @@ function TokenPane() {
                   jsx('button', {
                     type: 'button',
                     title: 'Balkenhöhe = Tokens pro Tag',
+                    // Selected: subtle accent TINT (emoji can't be recolored —
+                    // a solid accent bg drowns it; /15 keeps the glyph readable
+                    // while still marking the active state).
                     className: (histMetricVal !== 'cost'
-                      ? 'bg-(--ui-accent) text-(--card)'
+                      ? 'bg-(--ui-accent)/15 text-(--ui-accent) font-medium'
                       : 'text-(--ui-text-quaternary) hover:bg-(--ui-stroke-secondary)') +
                       ' rounded-sm px-1 py-0 text-[0.625rem] cursor-pointer',
                     onClick: () => { histMetric.set('tokens') },
@@ -1592,7 +1595,7 @@ function TokenPane() {
                     type: 'button',
                     title: 'Balkenhöhe = geschätzte Kosten (PAYG-Äquivalent) pro Tag',
                     className: (histMetricVal === 'cost'
-                      ? 'bg-(--ui-accent) text-(--card)'
+                      ? 'bg-(--ui-accent)/15 text-(--ui-accent) font-medium'
                       : 'text-(--ui-text-quaternary) hover:bg-(--ui-stroke-secondary)') +
                       ' rounded-sm px-1 py-0 text-[0.625rem] cursor-pointer',
                     onClick: () => { histMetric.set('cost') },
