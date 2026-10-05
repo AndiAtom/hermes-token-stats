@@ -840,6 +840,10 @@ const modelListOpen = atom(false)
 // breakdown over the active window. Session-local, default off.
 const subListOpen = atom(false)
 
+// Histogram metric (pane): 'tokens' | 'cost' — what the bar heights measure.
+// Session-local, default tokens. Tooltip always shows BOTH values.
+const histMetric = atom('tokens')
+
 function toggleDayCollapse(key) {
   // Flip the RESOLVED state, not the raw override: default-collapsed
   // days (everything except today) have no entry yet, so a naive
@@ -912,6 +916,8 @@ const EMPTY_MSG = {
 // session's tokens are attributed to its last-active day (visual
 // estimate — exact per-day splits would need per-message data).
 // Live-only rows (no lastActive) count towards today. Capped at 30 bars.
+// Each bucket also carries the day's estimated PAYG-equivalent cost
+// (same estimateCost as everywhere; null-cost rows contribute 0).
 function buildHistogram(rows, range) {
   const win = windowFor(range)
   const today = new Date(); today.setHours(0, 0, 0, 0)
@@ -927,7 +933,7 @@ function buildHistogram(rows, range) {
     const key = dayKeyDate(d)
     if (key in idx) continue // DST edge: 86400s steps can repeat a local day
     idx[key] = buckets.length
-    buckets.push({ key, tokens: 0, sessions: 0 })
+    buckets.push({ key, tokens: 0, cost: 0, sessions: 0 })
   }
   const todayKey = dayKeyDate(new Date())
   for (const r of rows) {
@@ -935,6 +941,8 @@ function buildHistogram(rows, range) {
     const i = idx[key]
     if (i == null) continue
     buckets[i].tokens += (r.u.input || 0) + (r.u.cache_read || 0) + (r.u.output || 0)
+    const c = estimateCost({ input: r.u.input, cache_read: r.u.cache_read, output: r.u.output, model: r.u.model, billing_provider: r.u.billing_provider })
+    if (c != null) buckets[i].cost += c
     buckets[i].sessions++
   }
   return buckets
@@ -1088,7 +1096,7 @@ function TokenChip() {
       jsxs('button', {
         type: 'button',
         className: 'inline-flex h-full items-center gap-1.5 px-1.5 text-[0.6875rem] text-(--ui-text-tertiary) tabular-nums cursor-pointer hover:text-(--ui-text-secondary)',
-        title: `Token Stats v4.5.1 · Click: configure display · drag header edges to resize pane columns${isPersisted ? ' · 📚 Known-Ledger values (monotonic)' : ''}\n\nInput: ${fmtFull(input)} · Cached: ${fmtFull(cached)}${hitPct != null ? ` (${hitPct}%)` : ''} · Output: ${fmtFull(out)} · Total: ${fmtFull(total)}`
+        title: `Token Stats v4.6.0 · Click: configure display · drag header edges to resize pane columns${isPersisted ? ' · 📚 Known-Ledger values (monotonic)' : ''}\n\nInput: ${fmtFull(input)} · Cached: ${fmtFull(cached)}${hitPct != null ? ` (${hitPct}%)` : ''} · Output: ${fmtFull(out)} · Total: ${fmtFull(total)}`
           + (ctxPct != null && ctxMax > 0 ? `\nContext: ${fmtFull(ctxUsed)} / ${fmtFull(ctxMax)} tokens (${ctxPct}%)` : '')
           + (cost != null ? `\nCost: ${(cost * EUR_RATE).toFixed(2)} €` : '')
           + (calls > 0 ? `\nAPI calls: ${fmtFull(calls)}` : ''),
@@ -1412,7 +1420,12 @@ function TokenPane() {
 
   // Mini-histogram scale: max daily token total in the window.
   const histBuckets = buildHistogram(rows, range)
-  const histMax = histBuckets.reduce((m, b) => Math.max(m, b.tokens), 0)
+  const histMetricVal = useValue(histMetric)
+  // Both maxima are computed (cheap) so switching the metric never needs
+  // a rebuild — and the tooltip can always show both values.
+  const histMaxTokens = histBuckets.reduce((m, b) => Math.max(m, b.tokens), 0)
+  const histMaxCost = histBuckets.reduce((m, b) => Math.max(m, b.cost), 0)
+  const histMax = histMetricVal === 'cost' ? histMaxCost : histMaxTokens
 
   // Aggregate over the unified rows (persistent = all rows in window).
   const grandInput = rows.reduce((s, r) => s + (r.u.input || 0), 0)
@@ -1548,31 +1561,64 @@ function TokenPane() {
             ],
           })
         : null,
-      // Mini histogram: tokens per day over the active window.
+      // Mini histogram: tokens (or cost) per day over the active window.
       // Skipped ONLY for the 1d preset (range === 'day' — one bar at 100%
       // carries no information). Other presets always render, even when
       // the window currently spans a single day (e.g. 5d/7d on a Monday:
       // their calendar windows start today 0:00).
+      // Metric toggle (🪙/€): bar heights measure tokens or estimated
+      // PAYG-equivalent cost; the tooltip always shows both.
       histOk && rows.length > 0 && range !== 'day'
-        ? jsx('div', {
+        ? jsxs('div', {
             className: 'shrink-0',
-            children: jsx('div', {
-              className: 'rounded-md border border-(--ui-stroke-secondary) px-2 py-1.5',
-              children: jsxs('div', {
-                className: 'flex items-end gap-[2px] h-8',
-                children: histBuckets.map(b => {
-                  const h = histMax ? Math.max(4, Math.round(b.tokens / histMax * 100)) : 0
-                  return jsx('div', {
-                    className: 'flex-1 flex flex-col justify-end h-full',
-                    title: `${dayLabel(b.key)} · ${fmt(b.tokens)} Tokens · ${b.sessions} Sitzung${b.sessions === 1 ? '' : 'en'}`,
-                    children: jsx('div', {
-                      className: 'w-full rounded-sm bg-(--ui-accent)' + (b.tokens === 0 ? '/30' : ''),
-                      style: { height: (b.tokens === 0 ? 3 : h) + '%' },
-                    }),
-                  }, b.key)
-                }),
+            children: [
+            jsxs('div', {
+              className: 'flex items-center justify-between text-[0.625rem] text-(--ui-text-quaternary) mb-0.5',
+              children: [
+                jsx('span', {
+                  title: 'Tages-Balken: Höhe relativ zum stärksten Tag im Fenster',
+                  children: histMetricVal === 'cost' ? '€ pro Tag' : 'Tokens pro Tag' }),
+                jsxs('div', { className: 'flex items-center gap-0.5', children: [
+                  jsx('button', {
+                    type: 'button',
+                    title: 'Balkenhöhe = Tokens pro Tag',
+                    className: (histMetricVal !== 'cost'
+                      ? 'bg-(--ui-accent) text-(--card)'
+                      : 'text-(--ui-text-quaternary) hover:bg-(--ui-stroke-secondary)') +
+                      ' rounded-sm px-1 py-0 text-[0.625rem] cursor-pointer',
+                    onClick: () => { histMetric.set('tokens') },
+                    children: '🪙' }, 'histTok'),
+                  jsx('button', {
+                    type: 'button',
+                    title: 'Balkenhöhe = geschätzte Kosten (PAYG-Äquivalent) pro Tag',
+                    className: (histMetricVal === 'cost'
+                      ? 'bg-(--ui-accent) text-(--card)'
+                      : 'text-(--ui-text-quaternary) hover:bg-(--ui-stroke-secondary)') +
+                      ' rounded-sm px-1 py-0 text-[0.625rem] cursor-pointer',
+                    onClick: () => { histMetric.set('cost') },
+                    children: '€' }, 'histCost'),
+                ]}),
+              ],
+            }),
+            jsx('div', {
+            className: 'rounded-md border border-(--ui-stroke-secondary) px-2 py-1.5',
+            children: jsxs('div', {
+              className: 'flex items-end gap-[2px] h-8',
+              children: histBuckets.map(b => {
+                const v = histMetricVal === 'cost' ? b.cost : b.tokens
+                const h = histMax ? Math.max(4, Math.round(v / histMax * 100)) : 0
+                return jsx('div', {
+                  className: 'flex-1 flex flex-col justify-end h-full',
+                  title: `${dayLabel(b.key)} · ${fmt(b.tokens)} Tokens · ≈ ${(b.cost * EUR_RATE).toFixed(2)} € · ${b.sessions} Sitzung${b.sessions === 1 ? '' : 'en'}`,
+                  children: jsx('div', {
+                    className: 'w-full rounded-sm bg-(--ui-accent)' + (v === 0 ? '/30' : ''),
+                    style: { height: (v === 0 ? 3 : h) + '%' },
+                  }),
+                }, b.key)
               }),
             }),
+          }),
+          ],
           })
         : null,
 
