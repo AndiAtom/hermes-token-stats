@@ -1096,7 +1096,7 @@ function TokenChip() {
       jsxs('button', {
         type: 'button',
         className: 'inline-flex h-full items-center gap-1.5 px-1.5 text-[0.6875rem] text-(--ui-text-tertiary) tabular-nums cursor-pointer hover:text-(--ui-text-secondary)',
-        title: `Token Stats v4.6.2 · Click: configure display · drag header edges to resize pane columns${isPersisted ? ' · 📚 Known-Ledger values (monotonic)' : ''}\n\nInput: ${fmtFull(input)} · Cached: ${fmtFull(cached)}${hitPct != null ? ` (${hitPct}%)` : ''} · Output: ${fmtFull(out)} · Total: ${fmtFull(total)}`
+        title: `Token Stats v4.6.3 · Click: configure display · drag header edges to resize pane columns${isPersisted ? ' · 📚 Known-Ledger values (monotonic)' : ''}\n\nInput: ${fmtFull(input)} · Cached: ${fmtFull(cached)}${hitPct != null ? ` (${hitPct}%)` : ''} · Output: ${fmtFull(out)} · Total: ${fmtFull(total)}`
           + (ctxPct != null && ctxMax > 0 ? `\nContext: ${fmtFull(ctxUsed)} / ${fmtFull(ctxMax)} tokens (${ctxPct}%)` : '')
           + (cost != null ? `\nCost: ${(cost * EUR_RATE).toFixed(2)} €` : '')
           + (calls > 0 ? `\nAPI calls: ${fmtFull(calls)}` : ''),
@@ -1627,8 +1627,13 @@ function TokenPane() {
                   className: 'flex-1 flex flex-col justify-end h-full',
                   title: `${dayLabel(b.key)} · ${fmt(b.tokens)} Tokens · ≈ ${(b.cost * EUR_RATE).toFixed(2)} € · ${b.sessions} Sitzung${b.sessions === 1 ? '' : 'en'}`,
                   children: jsx('div', {
-                    className: 'w-full rounded-sm bg-(--ui-accent)' + (v === 0 ? '/30' : ''),
-                    style: { height: (v === 0 ? 3 : h) + '%' },
+                    className: 'w-full rounded-sm',
+                    style: {
+                      height: (v === 0 ? 3 : h) + '%',
+                      background: v === 0
+                        ? 'color-mix(in srgb, var(--ui-accent) 30%, transparent)'
+                        : 'var(--ui-accent)',
+                    },
                   }),
                 }, b.key)
               }),
@@ -1741,17 +1746,27 @@ function TokenPane() {
                         ? '\n⚠ DB-Reset erkannt — Werte aus dem Known-Ledger (monoton)'
                         : ''
                       // Relative-size bar behind the Out cell (vs. the
-                      // largest session in view)
+                      // largest session in view). INLINE STYLES — opacity-
+                      // modified CSS-var utilities don't reliably paint in
+                      // the desktop runtime (same lesson as cache-hit bar).
                       const outBar = maxOut > 0 && (u.output || 0) > 0
                         ? jsx('div', {
-                            className: 'absolute inset-y-[3px] right-0 rounded-sm bg-(--ui-accent)/10 z-0',
-                            style: { width: Math.max(4, (u.output / maxOut) * 100) + '%' },
+                            className: 'absolute inset-y-[3px] right-0 rounded-sm z-0',
+                            style: {
+                              width: Math.max(4, (u.output / maxOut) * 100) + '%',
+                              background: 'color-mix(in srgb, var(--ui-accent) 10%, transparent)',
+                            },
                           })
                         : null
                       out.push(jsxs('tr', {
                         className: isFocused
-                          ? 'bg-(--ui-accent)/10 border-l-2 border-(--ui-accent)'
+                          ? 'border-l-2 border-(--ui-accent)'
                           : 'border-b border-(--ui-stroke-secondary)/50',
+                        // Focused-row tint as INLINE STYLE — the /10 opacity
+                        // utility doesn't reliably paint (same lesson).
+                        style: isFocused
+                          ? { background: 'color-mix(in srgb, var(--ui-accent) 10%, transparent)' }
+                          : undefined,
                         children: [
                           jsxs('td', {
                             className: 'py-1 pr-2 truncate',
