@@ -1088,7 +1088,7 @@ function TokenChip() {
       jsxs('button', {
         type: 'button',
         className: 'inline-flex h-full items-center gap-1.5 px-1.5 text-[0.6875rem] text-(--ui-text-tertiary) tabular-nums cursor-pointer hover:text-(--ui-text-secondary)',
-        title: `Token Stats v4.5.0 · Click: configure display · drag header edges to resize pane columns${isPersisted ? ' · 📚 Known-Ledger values (monotonic)' : ''}\n\nInput: ${fmtFull(input)} · Cached: ${fmtFull(cached)}${hitPct != null ? ` (${hitPct}%)` : ''} · Output: ${fmtFull(out)} · Total: ${fmtFull(total)}`
+        title: `Token Stats v4.5.1 · Click: configure display · drag header edges to resize pane columns${isPersisted ? ' · 📚 Known-Ledger values (monotonic)' : ''}\n\nInput: ${fmtFull(input)} · Cached: ${fmtFull(cached)}${hitPct != null ? ` (${hitPct}%)` : ''} · Output: ${fmtFull(out)} · Total: ${fmtFull(total)}`
           + (ctxPct != null && ctxMax > 0 ? `\nContext: ${fmtFull(ctxUsed)} / ${fmtFull(ctxMax)} tokens (${ctxPct}%)` : '')
           + (cost != null ? `\nCost: ${(cost * EUR_RATE).toFixed(2)} €` : '')
           + (calls > 0 ? `\nAPI calls: ${fmtFull(calls)}` : ''),
@@ -1549,9 +1549,11 @@ function TokenPane() {
           })
         : null,
       // Mini histogram: tokens per day over the active window.
-      // Skipped when the window spans a single day (1d view — one bar at
-      // 100% carries no information).
-      histOk && rows.length > 0 && histBuckets.length > 1
+      // Skipped ONLY for the 1d preset (range === 'day' — one bar at 100%
+      // carries no information). Other presets always render, even when
+      // the window currently spans a single day (e.g. 5d/7d on a Monday:
+      // their calendar windows start today 0:00).
+      histOk && rows.length > 0 && range !== 'day'
         ? jsx('div', {
             className: 'shrink-0',
             children: jsx('div', {
