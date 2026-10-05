@@ -227,12 +227,14 @@ for (const r of rows) {
   else if (r.input + r.output > 0) unpricedRows++
 }
 
-// Histogram (month window → one bucket per day of month so far)
+// Histogram (month window → one bucket per day of month so far).
+// v4.6.x: buckets also carry per-day estimated cost; bar heights follow
+// the selected metric (tokens default). Tooltip shows both.
 const histBuckets = (() => {
   const start = new Date(); start.setDate(1); start.setHours(0, 0, 0, 0)
   const buckets = []
   for (let d = new Date(start); d <= new Date(); d.setDate(d.getDate() + 1)) {
-    buckets.push({ key: dayKeyDate(d), tokens: 0, sessions: 0 })
+    buckets.push({ key: dayKeyDate(d), tokens: 0, cost: 0, sessions: 0 })
   }
   const byKey = {}
   for (const b of buckets) byKey[b.key] = b
@@ -240,11 +242,13 @@ const histBuckets = (() => {
     const k = r.lastActive != null ? dayKeyTs(r.lastActive) : todayKey
     const b = byKey[k] || byKey[todayKey]
     b.tokens += r.input + r.cache_read + r.output
+    if (r.cost != null) b.cost += r.cost
     b.sessions++
   }
   return buckets
 })()
-const histMax = histBuckets.reduce((m, b) => Math.max(m, b.tokens), 0)
+const histMetric = 'tokens'  // demo shows the default state; 'cost' flips bars
+const histMax = histBuckets.reduce((m, b) => Math.max(m, histMetric === 'cost' ? b.cost : b.tokens), 0)
 
 // Model aggregate (footer list, open)
 const modelAgg = {}
@@ -317,18 +321,35 @@ const cacheBar = el('div', 'shrink-0', 'margin-top:-2px;padding-left:8px;padding
     el('div', null, `height:100%;background:var(--ui-accent);width:${Math.min(100, cacheHitPct)}%;`)),
 ])
 
-// Histogram
-const histCard = el('div', 'shrink-0', null,
+// Histogram (v4.6.x: header row with metric toggle 🪙/€, bars per metric)
+const histHeader = el('div', 'flex items-center justify-between text-[0.625rem] text-quaternary mb-0.5', null, [
+  el('span', null, 'cursor:help', txt(histMetric === 'cost' ? '€ pro Tag' : 'Tokens pro Tag')),
+  el('div', 'flex items-center', 'gap:2px', [
+    // selected: subtle accent tint (INLINE styles, as in the plugin v4.6.2)
+    el('button', 'rounded-sm', 'cursor:pointer;font-size:10px;padding:2px 4px;' +
+      (histMetric !== 'cost'
+        ? 'background:color-mix(in srgb, var(--ui-accent) 15%, transparent);color:var(--ui-accent);font-weight:500;'
+        : 'color:var(--ui-text-quaternary);'), txt('🪙')),
+    el('button', 'rounded-sm', 'cursor:pointer;font-size:10px;padding:2px 4px;' +
+      (histMetric === 'cost'
+        ? 'background:color-mix(in srgb, var(--ui-accent) 15%, transparent);color:var(--ui-accent);font-weight:500;'
+        : 'color:var(--ui-text-quaternary);'), txt('€')),
+  ]),
+])
+const histCard = el('div', 'shrink-0', null, [
+  histHeader,
   el('div', 'rounded-md border stroke-secondary-full px-2 py-1.5', null,
     el('div', 'flex items-end gap-[2px] h-8', null,
       histBuckets.map(b => {
-        const h = histMax ? Math.max(4, Math.round(b.tokens / histMax * 100)) : 0
+        const v = histMetric === 'cost' ? b.cost : b.tokens
+        const h = histMax ? Math.max(4, Math.round(v / histMax * 100)) : 0
         const inner = el('div', null,
-          `width:100%;border-radius:2px;background:var(--ui-accent);height:${b.tokens === 0 ? 3 : h}%;` +
-          (b.tokens === 0 ? 'opacity:0.3;' : ''),
+          `width:100%;border-radius:2px;background:var(--ui-accent);height:${v === 0 ? 3 : h}%;` +
+          (v === 0 ? 'opacity:0.3;' : ''),
         )
         return el('div', 'flex-1c flex flex-col justify-end h-full', null, inner)
-      }))))
+      }))),
+])
 
 // Session table
 const thead = el('thead', null, null, el('tr', 'text-quaternary text-[0.625rem] uppercase', null, [
