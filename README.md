@@ -25,7 +25,8 @@ live-only). Since v4.4:
 - **Grand-total summary** aligned to the table columns, with a ⚡ cache-hit
   bar (share of prompt tokens served from cache)
 - **Mini histogram**: tokens per day over the window (skipped on 1d — a
-  single bar carries no information)
+  single bar carries no information), with a 🪙/€ toggle switching bar
+  heights between daily tokens and daily estimated PAYG-equivalent cost
 - **Collapsible day groups** with per-day totals; today expanded by default
 - **Per-model and per-subagent breakdown lists** (footer toggles,
   bottom-pinned, with relative size bars)
