@@ -1,7 +1,7 @@
 /**
  * Token Stats — statusbar chip + pane showing per-session token usage.
  *
- * @version v4.7.4
+ * @version v4.7.5
  *
  * Chip: compact live readout of the focused session. Every metric (tokens,
  * cache, context, cost, calls) is toggleable via a click menu on the chip;
@@ -986,12 +986,17 @@ async function fetchLedger(params) {
 function ChipMenu() {
   const show = useValue(showMap)
   return jsxs('div', {
-    className: 'flex flex-col gap-0.5 p-1.5 rounded-md border border-(--ui-stroke-secondary) bg-(--card) shadow-lg text-[0.75rem]',
+    className: 'flex flex-col gap-0.5 p-1.5 rounded-md border border-(--ui-stroke-secondary) shadow-lg text-[0.75rem]',
     // INLINE minWidth: arbitrary-value utilities (min-w-[170px]) don't
     // reliably paint in the desktop runtime (same failure class as
     // h-[3px]/inset-y — v4.6.3/4). A menu narrower than its longest label
     // wraps rows on narrow (empty-session) chips.
-    style: { minWidth: '180px' },
+    // INLINE background: bg-(--card) maps to --dt-card, which goes
+    // translucent in glass mode (window translucency buries surface
+    // tokens under the native material). --ui-bg-editor is an opaque
+    // color-mix of the skin seeds — popup stays undurchsichtig in every
+    // mode while still following the active skin.
+    style: { minWidth: '180px', background: 'var(--ui-bg-editor)' },
     // stopPropagation so the chip's own onClick doesn't re-toggle the menu
     onClick: (e) => { e.stopPropagation() },
     children: [
@@ -1122,7 +1127,7 @@ function TokenChip() {
       jsxs('button', {
         type: 'button',
         className: 'inline-flex h-full items-center gap-1.5 px-1.5 text-[0.6875rem] text-(--ui-text-tertiary) tabular-nums cursor-pointer hover:text-(--ui-text-secondary)',
-        title: `Token Stats v4.7.4 · Click: configure display · drag header edges to resize pane columns${isPersisted ? ' · 📚 Known-Ledger values (monotonic)' : ''}\n\nInput: ${fmtFull(input)} · Cached: ${fmtFull(cached)}${hitPct != null ? ` (${hitPct}%)` : ''} · Output: ${fmtFull(out)} · Total: ${fmtFull(total)}`
+        title: `Token Stats v4.7.5 · Click: configure display · drag header edges to resize pane columns${isPersisted ? ' · 📚 Known-Ledger values (monotonic)' : ''}\n\nInput: ${fmtFull(input)} · Cached: ${fmtFull(cached)}${hitPct != null ? ` (${hitPct}%)` : ''} · Output: ${fmtFull(out)} · Total: ${fmtFull(total)}`
           + (ctxPct != null && ctxMax > 0 ? `\nContext: ${fmtFull(ctxUsed)} / ${fmtFull(ctxMax)} tokens (${ctxPct}%)` : '')
           + (cost != null ? `\nCost: ${(cost * EUR_RATE).toFixed(2)} €` : '')
           + (calls > 0 ? `\nAPI calls: ${fmtFull(calls)}` : ''),
