@@ -1,7 +1,7 @@
 /**
  * Token Stats — statusbar chip + pane showing per-session token usage.
  *
- * @version v4.6.5
+ * @version v4.7.0
  *
  * Chip: compact live readout of the focused session. Every metric (tokens,
  * cache, context, cost, calls) is toggleable via a click menu on the chip;
@@ -847,6 +847,12 @@ const modelListOpen = atom(false)
 // breakdown over the active window. Session-local, default off.
 const subListOpen = atom(false)
 
+// Aux-task list (footer toggle): same UX as the model list — bottom-pinned
+// breakdown of auxiliary API calls (task != '', e.g. background_review,
+// compression, vision, title_generation, approval) over the active window.
+// Session-local, default off.
+const auxListOpen = atom(false)
+
 // Histogram metric (pane): 'tokens' | 'cost' — what the bar heights measure.
 // Session-local, default tokens. Tooltip always shows BOTH values.
 const histMetric = atom('tokens')
@@ -1103,7 +1109,7 @@ function TokenChip() {
       jsxs('button', {
         type: 'button',
         className: 'inline-flex h-full items-center gap-1.5 px-1.5 text-[0.6875rem] text-(--ui-text-tertiary) tabular-nums cursor-pointer hover:text-(--ui-text-secondary)',
-        title: `Token Stats v4.6.5 · Click: configure display · drag header edges to resize pane columns${isPersisted ? ' · 📚 Known-Ledger values (monotonic)' : ''}\n\nInput: ${fmtFull(input)} · Cached: ${fmtFull(cached)}${hitPct != null ? ` (${hitPct}%)` : ''} · Output: ${fmtFull(out)} · Total: ${fmtFull(total)}`
+        title: `Token Stats v4.7.0 · Click: configure display · drag header edges to resize pane columns${isPersisted ? ' · 📚 Known-Ledger values (monotonic)' : ''}\n\nInput: ${fmtFull(input)} · Cached: ${fmtFull(cached)}${hitPct != null ? ` (${hitPct}%)` : ''} · Output: ${fmtFull(out)} · Total: ${fmtFull(total)}`
           + (ctxPct != null && ctxMax > 0 ? `\nContext: ${fmtFull(ctxUsed)} / ${fmtFull(ctxMax)} tokens (${ctxPct}%)` : '')
           + (cost != null ? `\nCost: ${(cost * EUR_RATE).toFixed(2)} €` : '')
           + (calls > 0 ? `\nAPI calls: ${fmtFull(calls)}` : ''),
@@ -1302,6 +1308,44 @@ function TokenPane() {
   // Subagent scale for the relative bars (largest subagent = 100%)
   const maxSubTotal = subRows.reduce((m, e) => Math.max(m, e.in + e.cached + e.out), 0)
 
+  // Aux-task aggregate over the active window (footer aux list): rows with
+  // task != '' grouped by task. Same counter semantics as the model list
+  // (known counters, max'd with the live-db snapshot). This is a VIEW over
+  // data that already counts fully in the session totals — no filtering.
+  const auxAgg = {}
+  for (const r of histByModel) {
+    if (!r.task) continue
+    const a = auxAgg[r.task] || (auxAgg[r.task] = {
+      task: r.task,
+      in: 0, cached: 0, out: 0, calls: 0, sessions: new Set(),
+      models: new Map(), // model → totals, for the tooltip
+    })
+    a.in += Math.max(r.input_tokens || 0, r.live_in || 0)
+    a.cached += Math.max(r.cache_read_tokens || 0, r.live_cached || 0)
+    a.out += Math.max(r.output_tokens || 0, r.live_out || 0)
+    a.calls += Math.max(r.api_calls || 0, r.live_calls || 0)
+    a.sessions.add(r.session_id)
+    const mo = a.models.get(r.model) || { in: 0, cached: 0, out: 0, calls: 0 }
+    mo.in += Math.max(r.input_tokens || 0, r.live_in || 0)
+    mo.cached += Math.max(r.cache_read_tokens || 0, r.live_cached || 0)
+    mo.out += Math.max(r.output_tokens || 0, r.live_out || 0)
+    mo.calls += Math.max(r.api_calls || 0, r.live_calls || 0)
+    a.models.set(r.model, mo)
+  }
+  const auxAggList = Object.values(auxAgg)
+    .sort((a, b) => ((b.in + b.cached + b.out) - (a.in + a.cached + a.out)))
+  // Aux scale for the relative bars (largest task in view = 100%)
+  const maxAuxTotal = auxAggList.reduce((m, e) => Math.max(m, e.in + e.cached + e.out), 0)
+  // Human-readable aux task names for list rows + toggle label
+  const AUX_LABELS = {
+    background_review: 'Hintergrund-Review',
+    compression: 'Kompression',
+    vision: 'Vision',
+    title_generation: 'Titel-Generierung',
+    approval: 'Approval',
+  }
+  const auxLabel = (t) => AUX_LABELS[t] || t
+
   const { data: sessionList } = useQuery({
     queryKey: [ID, 'sessions'],
     queryFn: () => host.request('session.list', { limit: 200 }),
@@ -1403,6 +1447,7 @@ function TokenPane() {
   const dayCollapse = useValue(collapsedDays)
   const modelListOpenVal = useValue(modelListOpen)
   const subListOpenVal = useValue(subListOpen)
+  const auxListOpenVal = useValue(auxListOpen)
   // Resolved collapse state: explicit override if set, else default
   // (today expanded, every other day collapsed)
   const todayKey = dayKeyDate(new Date())
@@ -1936,6 +1981,62 @@ function TokenPane() {
           })
         : null,
 
+      // Aux-task breakdown (footer "N Aux" toggle). Same pattern as the
+      // model list: bottom-pinned, compact total-token rows with relative
+      // bars, breakdown + per-model detail in the tooltip. View over data
+      // that already counts in the session totals — no filtering.
+      auxListOpenVal && histOk && auxAggList.length > 0
+        ? jsxs('div', {
+            className: 'shrink-0',
+            children: [
+              jsxs('div', {
+                className: 'flex items-center justify-between text-[0.625rem] text-(--ui-text-quaternary) mb-0.5 px-0.5',
+                children: [
+                  jsx('span', { className: 'uppercase', children: 'Aux-Tasks' }),
+                  jsx('span', { className: 'tabular-nums', children: `${auxAggList.length} Task${auxAggList.length === 1 ? '' : 's'}` }),
+                ],
+              }),
+              jsxs('div', {
+                className: 'rounded-md border border-(--ui-stroke-secondary) divide-y divide-(--ui-stroke-secondary)/50 max-h-40 overflow-auto',
+                children: auxAggList.map(a => {
+                  const total = a.in + a.cached + a.out
+                  const tip = a.sessions.size === 1 ? '1 Sitzung' : `${a.sessions.size} Sitzungen`
+                  const bar = maxAuxTotal > 0 && total > 0
+                    ? jsx('div', {
+                        style: {
+                          position: 'absolute', top: 3, bottom: 3, left: 0,
+                          borderRadius: 2,
+                          background: 'var(--ui-accent)', opacity: 0.1,
+                          width: Math.max(4, total / maxAuxTotal * 100) + '%',
+                        },
+                      })
+                    : null
+                  // Per-model breakdown lines for the tooltip
+                  const modelTip = a.models.size > 1
+                    ? '\nModelle: ' + [...a.models.entries()]
+                        .map(([mo, v]) => `${mo}: in ${fmt(v.in)}, ⚡ ${fmt(v.cached)}, out ${fmt(v.out)}`)
+                        .join(' · ')
+                    : ''
+                  return jsxs('div', {
+                    className: 'relative flex items-center justify-between gap-2 px-2 py-1 overflow-hidden',
+                    title: `${auxLabel(a.task)} (${a.task})\nIn: ${fmtFull(a.in)} · ⚡: ${fmtFull(a.cached)} · Out: ${fmtFull(a.out)}\nGesamt: ${fmtFull(total)} Tokens · Calls: ${fmtFull(a.calls)} · ${tip}${modelTip}`,
+                    children: [
+                      bar,
+                      jsxs('div', { className: 'relative z-10 flex items-baseline gap-1.5 min-w-0', children: [
+                        jsx('span', { className: 'truncate font-medium', children: auxLabel(a.task) }),
+                        jsx('span', { className: 'text-[0.625rem] text-(--ui-text-quaternary) shrink-0', children: tip }),
+                      ]}),
+                      jsxs('div', { className: 'relative z-10 flex items-center gap-2 shrink-0 tabular-nums text-(--ui-text-secondary)', children: [
+                        jsx('span', { title: `Gesamttokens: ${fmtFull(total)}`, children: fmt(total) }),
+                      ]}),
+                    ],
+                  }, a.task)
+                }),
+              }),
+            ],
+          })
+        : null,
+
       // Footer: session/model counts + active calendar window. The model
       // count is a toggle for the per-model list above.
       jsxs('div', {
@@ -1968,6 +2069,21 @@ function TokenPane() {
                  onClick: () => { subListOpen.set(!subListOpenVal) },
                  children: `${subRows.length} Subagent${subRows.length === 1 ? '' : 'en'}`,
                }, 'subToggle')]
+            : null,
+          auxAggList.length > 0
+            ? [' · ',
+               jsxs('button', {
+                 type: 'button',
+                 title: auxListOpenVal
+                   ? 'Aux-Task-Liste zuklappen'
+                   : 'Aux-Task-Liste aufklappen (Auxiliary-Calls: Hintergrund-Review, Kompression, Vision, Titel, Approval — im aktiven Fenster)',
+                 className: (auxListOpenVal
+                   ? 'text-(--ui-text-secondary) font-medium'
+                   : 'hover:text-(--ui-text-secondary)') +
+                   ' cursor-pointer underline decoration-(--ui-stroke-secondary) decoration-dotted underline-offset-2',
+                 onClick: () => { auxListOpen.set(!auxListOpenVal) },
+                 children: `${auxAggList.length} Aux-Task${auxAggList.length === 1 ? '' : 's'}`,
+               }, 'auxToggle')]
             : null,
           histOk ? ` · ${windowLabel(range)}` : '',
         ],
