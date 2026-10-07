@@ -28,8 +28,9 @@ live-only). Since v4.4:
   single bar carries no information), with a 🪙/€ toggle switching bar
   heights between daily tokens and daily estimated PAYG-equivalent cost
 - **Collapsible day groups** with per-day totals; today expanded by default
-- **Per-model and per-subagent breakdown lists** (footer toggles,
-  bottom-pinned, with relative size bars)
+- **Per-model, per-subagent and per-aux-task breakdown lists** (footer
+  toggles, bottom-pinned, with relative size bars; aux tasks = auxiliary
+  API calls like background review, compression, vision, title generation)
 - **Drag-resizable columns**: grab the right edge of any header cell
   (except the last) — widths persist across app restarts via
   `ctx.storage` (`hermes.plugin.token-stats.colWidths`)
@@ -47,8 +48,8 @@ collapsible day-group separator rows with per-day totals, focused session
 highlighted with the accent left border. `●` marks a live-only session, `⚠`
 a ledger-recorded DB reset, `≈` on totals indicates unpriced rows excluded,
 `—` marks missing values (unpriced model / no cache). The footer toggles open
-the per-model and per-subagent breakdown lists (bottom-pinned, with relative
-size bars).*
+the per-model, per-subagent and per-aux-task breakdown lists (bottom-pinned,
+with relative size bars).*
 
 > The screenshot is generated from `docs/pane-mockup.html` — a standalone
 > 1:1 mockup of the pane's render logic with sample data (the live pane
