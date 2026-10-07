@@ -1,7 +1,7 @@
 /**
  * Token Stats — statusbar chip + pane showing per-session token usage.
  *
- * @version v4.7.1
+ * @version v4.7.2
  *
  * Chip: compact live readout of the focused session. Every metric (tokens,
  * cache, context, cost, calls) is toggleable via a click menu on the chip;
@@ -1054,12 +1054,19 @@ function TokenChip() {
   // ALL hooks unconditionally first (short-circuiting between hooks changes
   // the hook count between renders → React crash on session switches).
   const usage = useValue(host.state.focusedUsage)
+  // DURABLE session id (matches state.db / ledger rows) — NOT the runtime id!
+  // host.state.focusedSessionId is the runtime id (key for session.* RPCs,
+  // e.g. '5e0bef37'), which the ledger backend has never heard of. The chip
+  // merges live usage with ledger KNOWN totals, so it must ask the ledger
+  // with the stored id. (Bug v4.7.2: asking with the runtime id made every
+  // known-merge silently fall back to live-only.)
+  const focusedStored = useValue(host.state.focusedStoredSessionId)
   const focusedSid = useValue(host.state.focusedSessionId)
   const activeSid = useValue(host.state.activeSessionId)
   const breakdown = useContextBreakdown(true)
   const show = useValue(showMap)
   const menuOpen = useValue(menuOpenMap)
-  const sid = focusedSid || activeSid
+  const sid = focusedStored || focusedSid || activeSid
   // Live usage covers sessions that ran a turn in THIS process. Older
   // sessions report nothing live — fall back to persistent DB totals.
   const hasLive = Boolean(usage && (usage.total || usage.input || usage.output || usage.calls))
@@ -1109,7 +1116,7 @@ function TokenChip() {
       jsxs('button', {
         type: 'button',
         className: 'inline-flex h-full items-center gap-1.5 px-1.5 text-[0.6875rem] text-(--ui-text-tertiary) tabular-nums cursor-pointer hover:text-(--ui-text-secondary)',
-        title: `Token Stats v4.7.1 · Click: configure display · drag header edges to resize pane columns${isPersisted ? ' · 📚 Known-Ledger values (monotonic)' : ''}\n\nInput: ${fmtFull(input)} · Cached: ${fmtFull(cached)}${hitPct != null ? ` (${hitPct}%)` : ''} · Output: ${fmtFull(out)} · Total: ${fmtFull(total)}`
+        title: `Token Stats v4.7.2 · Click: configure display · drag header edges to resize pane columns${isPersisted ? ' · 📚 Known-Ledger values (monotonic)' : ''}\n\nInput: ${fmtFull(input)} · Cached: ${fmtFull(cached)}${hitPct != null ? ` (${hitPct}%)` : ''} · Output: ${fmtFull(out)} · Total: ${fmtFull(total)}`
           + (ctxPct != null && ctxMax > 0 ? `\nContext: ${fmtFull(ctxUsed)} / ${fmtFull(ctxMax)} tokens (${ctxPct}%)` : '')
           + (cost != null ? `\nCost: ${(cost * EUR_RATE).toFixed(2)} €` : '')
           + (calls > 0 ? `\nAPI calls: ${fmtFull(calls)}` : ''),
@@ -1248,7 +1255,10 @@ function useAnomalies(sids) {
 }
 
 function TokenPane() {
-  const focusedSid = useValue(host.state.focusedSessionId)
+  // Durable focused id (ledger rows carry state.db ids) for the focused-row
+  // highlight + breakdown overlay. The runtime id never matched a ledger row,
+  // so the highlight silently never fired — fixed alongside the chip bug.
+  const focusedSid = useValue(host.state.focusedStoredSessionId)
   const allUsage = useValue(usageMap)
   const range = useValue(historyRange)
   const breakdown = useContextBreakdown(true)
