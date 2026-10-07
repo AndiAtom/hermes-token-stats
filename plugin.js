@@ -1,7 +1,7 @@
 /**
  * Token Stats — statusbar chip + pane showing per-session token usage.
  *
- * @version v4.7.0
+ * @version v4.7.1
  *
  * Chip: compact live readout of the focused session. Every metric (tokens,
  * cache, context, cost, calls) is toggleable via a click menu on the chip;
@@ -1109,7 +1109,7 @@ function TokenChip() {
       jsxs('button', {
         type: 'button',
         className: 'inline-flex h-full items-center gap-1.5 px-1.5 text-[0.6875rem] text-(--ui-text-tertiary) tabular-nums cursor-pointer hover:text-(--ui-text-secondary)',
-        title: `Token Stats v4.7.0 · Click: configure display · drag header edges to resize pane columns${isPersisted ? ' · 📚 Known-Ledger values (monotonic)' : ''}\n\nInput: ${fmtFull(input)} · Cached: ${fmtFull(cached)}${hitPct != null ? ` (${hitPct}%)` : ''} · Output: ${fmtFull(out)} · Total: ${fmtFull(total)}`
+        title: `Token Stats v4.7.1 · Click: configure display · drag header edges to resize pane columns${isPersisted ? ' · 📚 Known-Ledger values (monotonic)' : ''}\n\nInput: ${fmtFull(input)} · Cached: ${fmtFull(cached)}${hitPct != null ? ` (${hitPct}%)` : ''} · Output: ${fmtFull(out)} · Total: ${fmtFull(total)}`
           + (ctxPct != null && ctxMax > 0 ? `\nContext: ${fmtFull(ctxUsed)} / ${fmtFull(ctxMax)} tokens (${ctxPct}%)` : '')
           + (cost != null ? `\nCost: ${(cost * EUR_RATE).toFixed(2)} €` : '')
           + (calls > 0 ? `\nAPI calls: ${fmtFull(calls)}` : ''),
@@ -1304,7 +1304,24 @@ function TokenPane() {
       cached: s.cache_read_tokens || 0,
       out: s.output_tokens || 0,
       calls: s.api_call_count || 0,
+      cost: 0, unpriced: false,
     }))
+  // Subagent costs: price each ledger model-row of the session individually
+  // (a subagent may use several models), using the SAME max'd counter values
+  // the row displays — so shown tokens and cost always match.
+  const subById = Object.fromEntries(subRows.map(s => [s.id, s]))
+  for (const r of histByModel) {
+    const s = subById[r.session_id]
+    if (!s) continue
+    const c = estimateCost({
+      input: Math.max(r.input_tokens || 0, r.live_in || 0),
+      cache_read: Math.max(r.cache_read_tokens || 0, r.live_cached || 0),
+      output: Math.max(r.output_tokens || 0, r.live_out || 0),
+      model: r.model, billing_provider: r.billing_provider,
+    })
+    if (c != null) s.cost += c
+    else if ((r.input_tokens || 0) + (r.output_tokens || 0) > 0) s.unpriced = true
+  }
   // Subagent scale for the relative bars (largest subagent = 100%)
   const maxSubTotal = subRows.reduce((m, e) => Math.max(m, e.in + e.cached + e.out), 0)
 
@@ -1318,6 +1335,7 @@ function TokenPane() {
     const a = auxAgg[r.task] || (auxAgg[r.task] = {
       task: r.task,
       in: 0, cached: 0, out: 0, calls: 0, sessions: new Set(),
+      cost: 0, unpriced: false,
       models: new Map(), // model → totals, for the tooltip
     })
     a.in += Math.max(r.input_tokens || 0, r.live_in || 0)
@@ -1325,6 +1343,14 @@ function TokenPane() {
     a.out += Math.max(r.output_tokens || 0, r.live_out || 0)
     a.calls += Math.max(r.api_calls || 0, r.live_calls || 0)
     a.sessions.add(r.session_id)
+    // PAYG-equivalent cost per aux row (per-model priced, like the model list)
+    const c = estimateCost({
+      input: Math.max(r.input_tokens || 0, r.live_in || 0),
+      cache_read: Math.max(r.cache_read_tokens || 0, r.live_cached || 0),
+      output: Math.max(r.output_tokens || 0, r.live_out || 0),
+      model: r.model, billing_provider: r.billing_provider,
+    })
+    if (c != null) a.cost += c; else if ((r.input_tokens || 0) + (r.output_tokens || 0) > 0) a.unpriced = true
     const mo = a.models.get(r.model) || { in: 0, cached: 0, out: 0, calls: 0 }
     mo.in += Math.max(r.input_tokens || 0, r.live_in || 0)
     mo.cached += Math.max(r.cache_read_tokens || 0, r.live_cached || 0)
@@ -1972,6 +1998,11 @@ function TokenPane() {
                       ]}),
                       jsxs('div', { className: 'relative z-10 flex items-center gap-2 shrink-0 tabular-nums text-(--ui-text-secondary)', children: [
                         jsx('span', { title: `Gesamttokens: ${fmtFull(total)}`, children: fmt(total) }),
+                        jsx('span', {
+                          className: 'text-(--ui-text-quaternary) min-w-[3.5rem] text-right',
+                          title: sr.cost > 0 ? `Geschätzte Kosten: ${(sr.cost * EUR_RATE).toFixed(2)} € (USD ${sr.cost.toFixed(2)})` : undefined,
+                          children: sr.cost > 0 ? (sr.unpriced ? '≈ ' : '') + (sr.cost * EUR_RATE).toFixed(2) + ' €' : '—',
+                        }),
                       ]}),
                     ],
                   }, sr.id)
@@ -2019,7 +2050,7 @@ function TokenPane() {
                     : ''
                   return jsxs('div', {
                     className: 'relative flex items-center justify-between gap-2 px-2 py-1 overflow-hidden',
-                    title: `${auxLabel(a.task)} (${a.task})\nIn: ${fmtFull(a.in)} · ⚡: ${fmtFull(a.cached)} · Out: ${fmtFull(a.out)}\nGesamt: ${fmtFull(total)} Tokens · Calls: ${fmtFull(a.calls)} · ${tip}${modelTip}`,
+                    title: `${auxLabel(a.task)} (${a.task})\nIn: ${fmtFull(a.in)} · ⚡: ${fmtFull(a.cached)} · Out: ${fmtFull(a.out)}\nGesamt: ${fmtFull(total)} Tokens · Calls: ${fmtFull(a.calls)} · ${tip}${a.cost > 0 ? ` · Geschätzt: ${(a.cost * EUR_RATE).toFixed(2)} € (USD ${a.cost.toFixed(2)})${a.unpriced ? ' (≈ — unpriced Rows ausgeschlossen)' : ''}` : ''}${modelTip}`,
                     children: [
                       bar,
                       jsxs('div', { className: 'relative z-10 flex items-baseline gap-1.5 min-w-0', children: [
@@ -2028,6 +2059,11 @@ function TokenPane() {
                       ]}),
                       jsxs('div', { className: 'relative z-10 flex items-center gap-2 shrink-0 tabular-nums text-(--ui-text-secondary)', children: [
                         jsx('span', { title: `Gesamttokens: ${fmtFull(total)}`, children: fmt(total) }),
+                        jsx('span', {
+                          className: 'text-(--ui-text-quaternary) min-w-[3.5rem] text-right',
+                          title: a.cost > 0 ? `Geschätzte Kosten: ${(a.cost * EUR_RATE).toFixed(2)} € (USD ${a.cost.toFixed(2)})` : undefined,
+                          children: a.cost > 0 ? (a.unpriced ? '≈ ' : '') + (a.cost * EUR_RATE).toFixed(2) + ' €' : '—',
+                        }),
                       ]}),
                     ],
                   }, a.task)
