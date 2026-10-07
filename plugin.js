@@ -1,7 +1,7 @@
 /**
  * Token Stats — statusbar chip + pane showing per-session token usage.
  *
- * @version v4.7.2
+ * @version v4.7.3
  *
  * Chip: compact live readout of the focused session. Every metric (tokens,
  * cache, context, cost, calls) is toggleable via a click menu on the chip;
@@ -1116,7 +1116,7 @@ function TokenChip() {
       jsxs('button', {
         type: 'button',
         className: 'inline-flex h-full items-center gap-1.5 px-1.5 text-[0.6875rem] text-(--ui-text-tertiary) tabular-nums cursor-pointer hover:text-(--ui-text-secondary)',
-        title: `Token Stats v4.7.2 · Click: configure display · drag header edges to resize pane columns${isPersisted ? ' · 📚 Known-Ledger values (monotonic)' : ''}\n\nInput: ${fmtFull(input)} · Cached: ${fmtFull(cached)}${hitPct != null ? ` (${hitPct}%)` : ''} · Output: ${fmtFull(out)} · Total: ${fmtFull(total)}`
+        title: `Token Stats v4.7.3 · Click: configure display · drag header edges to resize pane columns${isPersisted ? ' · 📚 Known-Ledger values (monotonic)' : ''}\n\nInput: ${fmtFull(input)} · Cached: ${fmtFull(cached)}${hitPct != null ? ` (${hitPct}%)` : ''} · Output: ${fmtFull(out)} · Total: ${fmtFull(total)}`
           + (ctxPct != null && ctxMax > 0 ? `\nContext: ${fmtFull(ctxUsed)} / ${fmtFull(ctxMax)} tokens (${ctxPct}%)` : '')
           + (cost != null ? `\nCost: ${(cost * EUR_RATE).toFixed(2)} €` : '')
           + (calls > 0 ? `\nAPI calls: ${fmtFull(calls)}` : ''),
@@ -1135,9 +1135,14 @@ function TokenChip() {
             : null,
           show.cache && cached > 0
             ? jsxs('span', {
-                className: 'text-(--ui-accent) ml-1',
+                className: 'ml-1',
                 title: `Cached input: ${fmtFull(cached)} tokens${hitPct != null ? ` · Hit rate: ${hitPct}%` : ''}`,
-                children: ['⚡', hitPct != null ? `${hitPct}%` : fmt(cached)],
+                // Icon keeps its accent, the NUMBER inherits the button color
+                // (same strength as the token count — numbers uniform, units faint).
+                children: [
+                  jsx('span', { className: 'text-(--ui-accent)', children: '⚡' }),
+                  hitPct != null ? `${hitPct}%` : fmt(cached),
+                ],
               })
             : null,
           show.context && ctxPct != null && ctxMax > 0
@@ -1145,9 +1150,11 @@ function TokenChip() {
                 className: 'ml-1',
                 title: `Context window: ${fmtFull(ctxUsed)} / ${fmtFull(ctxMax)} tokens (${ctxPct}%)${u.context_estimated ? ' · estimate' : ' · provider usage'}`,
                 children: [
-                  '📊',
+                  jsx('span', { className: 'text-(--ui-text-quaternary)', children: '📊' }),
                   jsx('span', {
-                    className: ctxPct >= 90 ? 'text-red-400' : ctxPct >= 75 ? 'text-amber-400' : 'text-(--ui-text-tertiary)',
+                    // warning colors stay functional; the default inherits
+                    // the button color so the number matches the token count
+                    className: ctxPct >= 90 ? 'text-red-400' : ctxPct >= 75 ? 'text-amber-400' : undefined,
                     children: `${ctxPct}%`,
                   }),
                 ],
@@ -1155,23 +1162,37 @@ function TokenChip() {
             : null,
           show.cost && cost != null
             ? jsxs('span', {
-                className: 'ml-1 text-(--ui-text-quaternary)',
+                className: 'ml-1',
                 title: `Estimated cost: ${(cost * EUR_RATE).toFixed(2)} € (USD ${cost.toFixed(4)})`,
-                children: ['💰', (cost * EUR_RATE).toFixed(2), ' €'],
+                // number inherits the button color; icon + currency unit stay faint
+                children: [
+                  jsx('span', { className: 'text-(--ui-text-quaternary)', children: '💰' }),
+                  (cost * EUR_RATE).toFixed(2),
+                  jsx('span', { className: 'text-(--ui-text-quaternary)', children: ' €' }),
+                ],
               })
             : null,
           show.calls && calls > 0
             ? jsxs('span', {
-                className: 'ml-1 text-(--ui-text-quaternary)',
+                className: 'ml-1',
                 title: `API calls: ${fmtFull(calls)}`,
-                children: ['🔁', String(calls)],
+                // number inherits the button color; icon stays faint
+                children: [
+                  jsx('span', { className: 'text-(--ui-text-quaternary)', children: '🔁' }),
+                  String(calls),
+                ],
               })
             : null,
         ],
       }),
       menuOpen
         ? jsx('div', {
-            className: 'absolute bottom-full right-0 mb-2 z-50',
+            // left-0 (not right-0): the chip is pinned at the LEFT edge of
+            // the statusbar — on an empty session the chip is ~30px wide and
+            // a right-aligned 170px menu would overflow the window's left
+            // edge (labels cut off). Anchoring left keeps the menu inside
+            // the viewport for any chip width.
+            className: 'absolute bottom-full left-0 mb-2 z-50',
             children: jsx(ChipMenu, {}),
           })
         : null,
