@@ -142,7 +142,7 @@ against the live `/v1/models` API:
 
 | Family | Model | Input | Cached | Output |
 |---|---|---|---|---|
-| Premier | Mistral Large 4 (`mistral-large-4`, `mistral-large-4-0`) | 1.36 | 0.14 | 4.18 |
+| Premier | Mistral Large 4 (`mistral-large-4`, `mistral-large-4-0`)² | 1.36 | 0.14 | 4.18 |
 | | Mistral Large 3 (`mistral-large-latest`) | 0.50 | 0.05 | 1.50 |
 | | Mistral Medium 3.5 (`mistral-medium-latest`) | 1.50 | 0.15 | 7.50 |
 | | Mistral Small 4 (`mistral-small-latest`) | 0.15 | 0.015 | 0.60 |
@@ -162,6 +162,11 @@ aliases — 43 entries total in `PRICES`.
 ¹ *Magistral is deprecated on the API (replacements: Medium 3.5 / Small 4) —
 legacy list prices, no longer on the official page. Voxtral Small likewise
 removed from the page; last verified list price (Sep 2026).*
+
+² *Mistral Large 4 is in public preview with a temporary sale price
+($0.68/$0.07/$2.09). We deliberately track the regular list price instead:
+the estimate is a PAYG-equivalent, not a mirror of a time-limited discount —
+preview pricing expires, list prices don't.*
 
 **Not priced** (non-token billing, `estimateCost()` → `null` → pane shows `—`):
 Voxtral Mini Transcribe ($/min), Voxtral TTS ($/M chars), Mistral OCR ($/1000
