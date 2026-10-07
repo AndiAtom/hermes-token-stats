@@ -118,7 +118,7 @@ to the model-only path, because a custom provider relay can bill differently.
 
 | Table | Source | Scope |
 |---|---|---|
-| `PRICES` | <https://docs.mistral.ai/inference/pricing> (verified 2026-09-19) | Mistral-hosted models + fixed aliases, 41 entries |
+| `PRICES` | <https://docs.mistral.ai/inference/pricing> (verified 2026-10-07) | Mistral-hosted models + fixed aliases, 43 entries |
 | `PRICES_OPENROUTER` | `openrouter.ai/api/v1/models` (generated 2026-10-04) | 459 curated models — text-in/text-out, priced or free, not expired; OR routing models excluded (no own price) |
 | `PRICES_PROVIDER.nous` | OpenRouter catalog (Nous publishes no machine-readable list) | same table, separately overridable when Nous' own pricing deviates |
 
@@ -142,7 +142,8 @@ against the live `/v1/models` API:
 
 | Family | Model | Input | Cached | Output |
 |---|---|---|---|---|
-| Premier | Mistral Large 3 (`mistral-large-latest`) | 0.50 | 0.05 | 1.50 |
+| Premier | Mistral Large 4 (`mistral-large-4`, `mistral-large-4-0`) | 1.36 | 0.14 | 4.18 |
+| | Mistral Large 3 (`mistral-large-latest`) | 0.50 | 0.05 | 1.50 |
 | | Mistral Medium 3.5 (`mistral-medium-latest`) | 1.50 | 0.15 | 7.50 |
 | | Mistral Small 4 (`mistral-small-latest`) | 0.15 | 0.015 | 0.60 |
 | Edge | Ministral 3 14B / 8B / 3B (`ministral-*-latest`) | 0.20 / 0.15 / 0.10 | 10% of input | = input |
@@ -156,7 +157,7 @@ against the live `/v1/models` API:
 
 Fixed-version API aliases (e.g. `mistral-medium-2604`, `ministral-8b-2512`,
 `codestral-2508`, `zai-glm-5-3`) are priced identically to their `-latest`
-aliases — 39 entries total in `PRICES`.
+aliases — 43 entries total in `PRICES`.
 
 ¹ *Magistral is deprecated on the API (replacements: Medium 3.5 / Small 4) —
 legacy list prices, no longer on the official page. Voxtral Small likewise
