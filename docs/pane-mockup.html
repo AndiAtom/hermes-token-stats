@@ -127,7 +127,7 @@
 </div>
 
 <script>
-// ── Logic copied 1:1 from plugin.js (v4.4.0) ──────────────────────────
+// ── Logic copied 1:1 from plugin.js (v4.7.1) ──────────────────────────
 const PRICES = {
   'zai-glm-latest': { input: 1.40, cached: 0.14, output: 4.40 },
   'mistral-small-latest': { input: 0.15, cached: 0.015, output: 0.60 },
@@ -266,12 +266,53 @@ for (const r of rows) {
 const modelAggList = Object.values(modelAgg).sort((a, b) => (b.in + b.cached + b.out) - (a.in + a.cached + a.out))
 const maxModelTotal = modelAggList.reduce((m, e) => Math.max(m, e.in + e.cached + e.out), 0)
 
-// Subagent rows (window has 2, list open)
+// Subagent rows (window has 2, list open). Costs are priced PER MODEL ROW
+// of the subagent (v4.7.1) — mockup: one model per subagent.
 const subRows = [
-  { id: 'sub1', title: 'Doku extrahieren', parent: true, in: 38_000, cached: 402_000, out: 9_100, calls: 12 },
-  { id: 'sub2', title: 'Git-History Scan', parent: false, in: 21_400, cached: 188_000, out: 4_300, calls: 7 },
+  { id: 'sub1', title: 'Doku extrahieren', parent: true, calls: 12,
+    models: [['zai-glm-latest', { in: 38_000, cached: 402_000, out: 9_100 }]] },
+  { id: 'sub2', title: 'Git-History Scan', parent: false, calls: 7,
+    models: [['zai-glm-latest', { in: 21_400, cached: 188_000, out: 4_300 }]] },
 ]
+for (const sr of subRows) {
+  sr.in = 0; sr.cached = 0; sr.out = 0; sr.cost = 0; sr.unpriced = false
+  for (const [mo, v] of sr.models) {
+    sr.in += v.in; sr.cached += v.cached; sr.out += v.out
+    const c = estimateCost({ model: mo, input: v.in, cache_read: v.cached, output: v.out })
+    if (c != null) sr.cost += c; else sr.unpriced = true
+  }
+}
 const maxSubTotal = subRows.reduce((m, e) => Math.max(m, e.in + e.cached + e.out), 0)
+
+// Aux-task rows (v4.7.0/4.7.1, third footer toggle): grouped by task like
+// auxAgg — background review dominates. View-only; counts already fully
+// inside the session totals. German labels via AUX_LABELS.
+const AUX_LABELS = {
+  background_review: 'Hintergrund-Review',
+  compression: 'Kompression',
+  vision: 'Vision',
+  title_generation: 'Titel-Generierung',
+  approval: 'Approval',
+}
+const auxLabel = (t) => AUX_LABELS[t] || t
+const auxAggList = [
+  { task: 'background_review', calls: 41, sessions: new Set(['s1', 's2', 's4']),
+    models: [['zai-glm-latest', { in: 96_400, cached: 2_310_000, out: 14_800, calls: 41 }]] },
+  { task: 'compression', calls: 12, sessions: new Set(['s1', 's8']),
+    models: [['zai-glm-latest', { in: 15_300, cached: 380_000, out: 7_200, calls: 8 }],
+             ['mistral-small-latest', { in: 6_000, cached: 80_000, out: 2_400, calls: 4 }]] },
+  { task: 'title_generation', calls: 9, sessions: new Set(['s4', 's5', 's6']),
+    models: [['mistral-small-latest', { in: 6_800, cached: 14_200, out: 2_100, calls: 9 }]] },
+]
+for (const a of auxAggList) {
+  a.in = 0; a.cached = 0; a.out = 0; a.cost = 0; a.unpriced = false
+  for (const [mo, v] of a.models) {
+    a.in += v.in; a.cached += v.cached; a.out += v.out
+    const c = estimateCost({ model: mo, input: v.in, cache_read: v.cached, output: v.out })
+    if (c != null) a.cost += c; else a.unpriced = true
+  }
+}
+const maxAuxTotal = auxAggList.reduce((m, e) => Math.max(m, e.in + e.cached + e.out), 0)
 
 const W = [48, 14, 14, 13, 11]  // persisted column widths
 
@@ -468,6 +509,42 @@ const subList = el('div', 'shrink-0', null, [
         ]),
         el('div', 'relative z-10 flex items-center shrink tabular-nums text-secondary', 'gap:8px', [
           el('span', null, null, txt(fmt(total))),
+          el('span', 'text-quaternary min-w-0 text-right', 'min-width:3.5rem',
+            txt(sr.cost > 0 ? (sr.unpriced ? '≈ ' : '') + (sr.cost * EUR_RATE).toFixed(2) + ' €' : '—')),
+        ]),
+      ])
+    })),
+])
+
+// Aux-task list (open, third footer toggle) — same pattern as the model list
+const auxList = el('div', 'shrink-0', null, [
+  el('div', 'flex items-center justify-between text-[0.625rem] text-quaternary mb-0.5 px-0.5', null, [
+    el('span', 'uppercase', null, txt('Aux-Tasks')),
+    el('span', 'tabular-nums', null, txt(`${auxAggList.length} Task${auxAggList.length === 1 ? '' : 's'}`)),
+  ]),
+  el('div', 'rounded-md border stroke-secondary-full divide max-h-40 overflow-auto', null,
+    auxAggList.map(a => {
+      const total = a.in + a.cached + a.out
+      const tip = a.sessions.size === 1 ? '1 Sitzung' : `${a.sessions.size} Sitzungen`
+      const bar = maxAuxTotal > 0 && total > 0
+        ? el('div', null,
+            `position:absolute;top:3px;bottom:3px;left:0;border-radius:2px;background:var(--ui-accent);opacity:0.1;width:${Math.max(4, total / maxAuxTotal * 100)}%;`)
+        : null
+      const modelTip = a.models.length > 1
+        ? '\nModelle: ' + a.models.map(([mo, v]) => `${mo}: in ${fmt(v.in)}, ⚡ ${fmt(v.cached)}, out ${fmt(v.out)}`).join(' · ')
+        : ''
+      return el('div', 'relative flex items-center justify-between gap-2 px-2 py-1 overflow-hidden',
+        `title:${auxLabel(a.task)} (${a.task})\nIn: ${fmtFull(a.in)} · ⚡: ${fmtFull(a.cached)} · Out: ${fmtFull(a.out)}\nGesamt: ${fmtFull(total)} Tokens · Calls: ${fmtFull(a.calls)} · ${tip}${a.cost > 0 ? ` · Geschätzt: ${(a.cost * EUR_RATE).toFixed(2)} € (USD ${a.cost.toFixed(2)})${a.unpriced ? ' (≈ — unpriced Rows ausgeschlossen)' : ''}` : ''}${modelTip}`,
+        [
+        bar,
+        el('div', 'relative z-10 flex items-baseline gap-1.5 min-w-0', null, [
+          el('span', 'truncate font-medium', null, txt(auxLabel(a.task))),
+          el('span', 'text-[0.625rem] text-quaternary shrink', null, txt(tip)),
+        ]),
+        el('div', 'relative z-10 flex items-center shrink tabular-nums text-secondary', 'gap:8px', [
+          el('span', null, null, txt(fmt(total))),
+          el('span', 'text-quaternary min-w-0 text-right', 'min-width:3.5rem',
+            txt(a.cost > 0 ? (a.unpriced ? '≈ ' : '') + (a.cost * EUR_RATE).toFixed(2) + ' €' : '—')),
         ]),
       ])
     })),
@@ -481,10 +558,13 @@ const footer = el('div', 'shrink-0 text-[0.625rem] text-quaternary text-center p
   txt(' · '),
   el('button', 'text-secondary font-medium cursor-pointer underline decoration-dotted underline-offset-2',
     'text-decoration-color:var(--ui-stroke-secondary)', txt(`${subRows.length} Subagenten`)),
+  txt(' · '),
+  el('button', 'text-secondary font-medium cursor-pointer underline decoration-dotted underline-offset-2',
+    'text-decoration-color:var(--ui-stroke-secondary)', txt(`${auxAggList.length} Aux-Tasks`)),
   txt(` · ${windowLabel()}`),
 ])
 
-pane.append(header, summary, cacheBar, histCard, listWrap, modelList, subList, footer)
+pane.append(header, summary, cacheBar, histCard, listWrap, modelList, subList, auxList, footer)
 </script>
 </body>
 </html>

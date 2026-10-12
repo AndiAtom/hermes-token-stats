@@ -47,9 +47,11 @@ columns, ⚡ cache-hit bar, mini histogram (tokens per day over the window),
 collapsible day-group separator rows with per-day totals, focused session
 highlighted with the accent left border. `●` marks a live-only session, `⚠`
 a ledger-recorded DB reset, `≈` on totals indicates unpriced rows excluded,
-`—` marks missing values (unpriced model / no cache). The footer toggles open
-the per-model, per-subagent and per-aux-task breakdown lists (bottom-pinned,
-with relative size bars).*
+`—` marks missing values (unpriced model / no cache). The footer toggles
+open the per-model, per-subagent and per-aux-task breakdown lists
+(bottom-pinned, relative size bars, per-row estimated cost — `—` when a
+model has no price, `≈` when unpriced rows were excluded from the row's
+estimate).*
 
 > The screenshot is generated from `docs/pane-mockup.html` — a standalone
 > 1:1 mockup of the pane's render logic with sample data (the live pane
@@ -78,6 +80,26 @@ Then in the app: ⌘K → **Reload desktop plugins**.
 
 > The app loads plugins from ITS OWN disk — editing a copy on a remote gateway
 > host does nothing for a desktop running on another machine.
+
+## Web dashboard pane
+
+The companion repo also ships a **web port of the pane** (`web-entry.js`,
+served by the Hermes web dashboard — the same gateway process that runs the
+known-ledger backend). It renders as a dashboard page at `/token-stats`:
+
+- Same data source (ledger backend over HTTP, 30 s polling — the web UI has
+  no `session.usage` event stream, so there is no live overlay; the daemon
+  poll interval is the floor)
+- Same pricing table, cost estimation, calendar windows and aggregation
+  logic as the desktop pane — both are kept in lockstep, the desktop plugin
+  is the reference implementation
+- Same breakdown lists (models, subagents, aux tasks), histogram and
+  drag-resizable columns; the statusbar chip and the focused-session
+  breakdown overlay are desktop-only
+
+No separate install: it deploys with the backend (`install.sh` of the
+[companion repo](https://github.com/AndiAtom/hermes-usage-history-rpc)),
+then the dashboard serves it automatically.
 
 ## Data flow (known / live / max)
 
