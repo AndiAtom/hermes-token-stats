@@ -1,7 +1,7 @@
 /**
  * Token Stats — statusbar chip + pane showing per-session token usage.
  *
- * @version v5.0.0
+ * @version v5.0.1
  *
  * Chip: compact live readout of the focused session. Every metric (tokens,
  * cache, context, cost, calls) is toggleable via a click menu on the chip;
@@ -866,6 +866,8 @@ const I18N = {
     errBackendDown: 'Ledger backend unreachable: ',
     errRetry: 'Retry',
     errCheckHint: 'Check: systemctl status token-stats-ledger · the dashboard process must have the plugin backend mounted (restart after deploy).',
+    ledgerOnlyNote: '\n● Ledger-only (session deleted from state.db)',
+    webPortTitle: 'Web port of the desktop pane',
   },
   de: {
     show_tokens: '🪙 Tokens',
@@ -956,6 +958,8 @@ const I18N = {
     errBackendDown: 'Ledger-Backend nicht erreichbar: ',
     errRetry: 'Erneut versuchen',
     errCheckHint: 'Prüfen: systemctl status token-stats-ledger · Dashboard-Prozess muss das Plugin-Backend gemountet haben (Restart nach Deploy).',
+    ledgerOnlyNote: '\n● Nur im Ledger (Session aus state.db gelöscht)',
+    webPortTitle: 'Web-Port der Desktop-Pane',
   },
   fr: {
     show_tokens: '🪙 Tokens',
@@ -1040,6 +1044,8 @@ const I18N = {
     errBackendDown: 'Backend du ledger inaccessible : ',
     errRetry: 'Réessayer',
     errCheckHint: 'Vérifier : systemctl status token-stats-ledger · le processus du dashboard doit avoir monté le plugin backend (redémarrage après déploiement).',
+    ledgerOnlyNote: '\n● Ledger uniquement (session supprimée de state.db)',
+    webPortTitle: 'Portage web de la pane desktop',
   },
   nl: {
     show_tokens: '🪙 Tokens',
@@ -1124,6 +1130,8 @@ const I18N = {
     errBackendDown: 'Ledger-backend niet bereikbaar: ',
     errRetry: 'Opnieuw proberen',
     errCheckHint: 'Controleer: systemctl status token-stats-ledger · het dashboard-proces moet de plugin-backend gemount hebben (herstart na deploy).',
+    ledgerOnlyNote: '\n● Alleen in het ledger (sessie verwijderd uit state.db)',
+    webPortTitle: 'Web-port van de desktop-pane',
   },
   it: {
     show_tokens: '🪙 Tokens',
@@ -1208,6 +1216,8 @@ const I18N = {
     errBackendDown: 'Backend del ledger non raggiungibile: ',
     errRetry: 'Riprova',
     errCheckHint: 'Verifica: systemctl status token-stats-ledger · il processo dashboard deve aver montato il plugin backend (riavvio dopo il deploy).',
+    ledgerOnlyNote: '\n● Solo nel ledger (sessione eliminata da state.db)',
+    webPortTitle: 'Port web della pane desktop',
   },
 }
 
@@ -1641,7 +1651,7 @@ function TokenChip() {
       jsxs('button', {
         type: 'button',
         className: 'inline-flex h-full items-center gap-1.5 px-1.5 text-[0.6875rem] text-(--ui-text-tertiary) tabular-nums cursor-pointer hover:text-(--ui-text-secondary)',
-        title: `Token Stats v5.0.0 · Click: configure display · drag header edges to resize pane columns${isPersisted ? ' · 📚 Known-Ledger values (monotonic)' : ''}\n\nInput: ${fmtFull(input)} · Cached: ${fmtFull(cached)}${hitPct != null ? ` (${hitPct}%)` : ''} · Output: ${fmtFull(out)} · Total: ${fmtFull(total)}`
+        title: `Token Stats v5.0.1 · Click: configure display · drag header edges to resize pane columns${isPersisted ? ' · 📚 Known-Ledger values (monotonic)' : ''}\n\nInput: ${fmtFull(input)} · Cached: ${fmtFull(cached)}${hitPct != null ? ` (${hitPct}%)` : ''} · Output: ${fmtFull(out)} · Total: ${fmtFull(total)}`
           + (ctxPct != null && ctxMax > 0 ? `\nContext: ${fmtFull(ctxUsed)} / ${fmtFull(ctxMax)} tokens (${ctxPct}%)` : '')
           + (cost != null ? `\nCost: ${fmtCost(cost)}` : '')
           + (calls > 0 ? `\nAPI calls: ${fmtFull(calls)}` : ''),
@@ -1814,6 +1824,10 @@ function TokenPane() {
   const range = useValue(historyRange)
   const breakdown = useContextBreakdown(true)
   const W = useValue(colWidths)
+  // Language + currency for the pane-header toggle row (v5.0.1) — same
+  // atoms the chip menu drives; unconditional hooks (repo rule).
+  const paneLang = useValue(LANG)
+  const paneCurrency = useValue(CURRENCY)
 
   const hist = HistoryQuery(range)
   const histOk = hist.data && hist.data.ok
@@ -2123,6 +2137,57 @@ function TokenPane() {
               children: p.label,
             }, p.key)),
           ]}),
+        ]
+      }),
+      // Language + currency toggle row (v5.0.1) — pane-header parity with
+      // the web dashboard. Same atoms as the chip menu (both stay in sync);
+      // segmented buttons with INLINE accent styles (opacity-modified CSS-var
+      // utilities don't paint in the desktop runtime).
+      jsxs('div', {
+        className: 'flex items-center justify-end gap-2 shrink-0',
+        children: [
+          jsx('span', {
+            className: 'text-[0.5625rem] uppercase text-(--ui-text-quaternary)',
+            style: { letterSpacing: '0.05em' },
+            children: t('menu_language') }),
+          jsx('div', {
+            className: 'flex items-center gap-0.5',
+            children: LANGS.map(l => jsx('button', {
+              type: 'button',
+              className: 'px-1.5 py-0.5 rounded-sm text-[0.625rem] cursor-pointer text-center'
+                + (l === paneLang ? ' font-medium' : ' text-(--ui-text-quaternary) hover:text-(--ui-text-secondary)'),
+              style: l === paneLang
+                ? {
+                    background: 'color-mix(in srgb, var(--ui-accent) 25%, transparent)',
+                    color: 'var(--ui-accent)',
+                  }
+                : undefined,
+              title: t('menu_language') + ': ' + LANG_LABELS[l],
+              onClick: () => { setLang(l) },
+              children: LANG_LABELS[l],
+            }, 'lang-' + l)) }),
+          jsx('span', {
+            className: 'text-[0.5625rem] uppercase text-(--ui-text-quaternary)',
+            style: { letterSpacing: '0.05em', marginLeft: '6px' },
+            children: t('menu_currency') }),
+          jsx('div', {
+            className: 'flex items-center gap-0.5',
+            children: [
+              ['EUR', '€'], ['USD', '$'].map(([c, sym]) => jsx('button', {
+                type: 'button',
+                className: 'px-1.5 py-0.5 rounded-sm text-[0.625rem] cursor-pointer text-center'
+                  + (c === paneCurrency ? ' font-medium' : ' text-(--ui-text-quaternary) hover:text-(--ui-text-secondary)'),
+                style: c === paneCurrency
+                  ? {
+                      background: 'color-mix(in srgb, var(--ui-accent) 25%, transparent)',
+                      color: 'var(--ui-accent)',
+                    }
+                  : undefined,
+                title: t('menu_currency') + ': ' + c,
+                onClick: () => { setCurrency(c) },
+                children: sym,
+              }, 'cur-' + c)) }),
+            ] }),
         ]
       }),
 
