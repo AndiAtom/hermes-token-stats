@@ -863,6 +863,9 @@ const I18N = {
     modelsColon: 'Models: ',
     dbReset: '⚠ DB reset detected — values from the known ledger (monotonic)',
     dbResetFlag: 'DB reset/anomaly recorded in the ledger — known values stay monotonic',
+    errBackendDown: 'Ledger backend unreachable: ',
+    errRetry: 'Retry',
+    errCheckHint: 'Check: systemctl status token-stats-ledger · the dashboard process must have the plugin backend mounted (restart after deploy).',
   },
   de: {
     show_tokens: '🪙 Tokens',
@@ -950,6 +953,9 @@ const I18N = {
     modelsColon: 'Modelle: ',
     dbReset: '⚠ DB-Reset erkannt — Werte aus dem Known-Ledger (monoton)',
     dbResetFlag: 'DB-Reset/Anomalie im Ledger verzeichnet — known-Werte bleiben monoton',
+    errBackendDown: 'Ledger-Backend nicht erreichbar: ',
+    errRetry: 'Erneut versuchen',
+    errCheckHint: 'Prüfen: systemctl status token-stats-ledger · Dashboard-Prozess muss das Plugin-Backend gemountet haben (Restart nach Deploy).',
   },
   fr: {
     show_tokens: '🪙 Tokens',
@@ -1031,6 +1037,9 @@ const I18N = {
     modelsColon: 'Modèles : ',
     dbReset: '⚠ Réinitialisation DB détectée — valeurs issues du Known-Ledger (monotone)',
     dbResetFlag: 'Réinitialisation/anomalie DB enregistrée dans le ledger — les valeurs known restent monotones',
+    errBackendDown: 'Backend du ledger inaccessible : ',
+    errRetry: 'Réessayer',
+    errCheckHint: 'Vérifier : systemctl status token-stats-ledger · le processus du dashboard doit avoir monté le plugin backend (redémarrage après déploiement).',
   },
   nl: {
     show_tokens: '🪙 Tokens',
@@ -1112,6 +1121,9 @@ const I18N = {
     modelsColon: 'Modellen: ',
     dbReset: '⚠ DB-reset gedetecteerd — waarden uit de Known-Ledger (monotonic)',
     dbResetFlag: 'DB-reset/anomalie geregistreerd in het ledger — known-waarden blijven monotoon',
+    errBackendDown: 'Ledger-backend niet bereikbaar: ',
+    errRetry: 'Opnieuw proberen',
+    errCheckHint: 'Controleer: systemctl status token-stats-ledger · het dashboard-proces moet de plugin-backend gemount hebben (herstart na deploy).',
   },
   it: {
     show_tokens: '🪙 Tokens',
@@ -1193,6 +1205,9 @@ const I18N = {
     modelsColon: 'Modelli: ',
     dbReset: '⚠ Reset DB rilevato — valori dal Known-Ledger (monotono)',
     dbResetFlag: 'Reset/anomalia DB registrata nel ledger — i valori known restano monotoni',
+    errBackendDown: 'Backend del ledger non raggiungibile: ',
+    errRetry: 'Riprova',
+    errCheckHint: 'Verifica: systemctl status token-stats-ledger · il processo dashboard deve aver montato il plugin backend (riavvio dopo il deploy).',
   },
 }
 
