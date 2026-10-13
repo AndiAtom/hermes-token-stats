@@ -13,8 +13,9 @@ Hermes Desktop plugin: statusbar chip + pane for per-session token usage.
   `null` (no display) for unpriced models — never a fabricated number
 - 🔁 **API-Calls** — lifetime provider request count
 
-**Language & Currency (v5.0.0)** — toggleable in the chip menu, on both
-the language row (DE / EN / FR / NL / IT) and the currency row (€ / $):
+**Language & Currency (v5.0.x)** — toggleable in TWO places: the chip menu
+AND a row in the pane header (same controls, always in sync) — language
+(DE / EN / FR / NL / IT) and currency (€ / $):
 
 - **UI language**: EN is the default; all UI strings (empty states,
   tooltips, day labels, footer, breakdown lists) follow the selection.
@@ -41,7 +42,8 @@ across app restarts. At least one metric stays visible — hiding all is blocked
 known-ledger data via `ctx.rest` (fallback `usage.history` RPC, then
 live-only). Since v4.4:
 - **Calendar range presets**: 1d (today), 5d (Mon–Fri workweek), 7d (calendar
-  week), 30d (running month), ∞ — buttons in the pane header
+  week), 30d (running month), ∞ — buttons in the pane header, with the
+  language + currency toggle row underneath (v5.0.1+)
 - **Grand-total summary** aligned to the table columns, with a ⚡ cache-hit
   bar (share of prompt tokens served from cache)
 - **Mini histogram**: tokens per day over the window (skipped on 1d — a
@@ -117,8 +119,9 @@ known-ledger backend). It renders as a dashboard page at `/token-stats`:
 - Same breakdown lists (models, subagents, aux tasks), histogram and
   drag-resizable columns; the statusbar chip and the focused-session
   breakdown overlay are desktop-only
-- Language and currency toggles in the pane header (v5.0.0-web.1),
-  persisted with the same `localStorage` keys as the desktop chip menu
+- Language and currency toggles in the pane header (since web.1; the
+  histogram's cost-metric icon follows the currency since web.2),
+  persisted with the same `localStorage` keys as the desktop
 
 No separate install: it deploys with the backend (`install.sh` of the
 [companion repo](https://github.com/AndiAtom/hermes-usage-history-rpc)),
@@ -226,12 +229,14 @@ The gateway's `input` already **excludes** cached tokens
 
 ## Roadmap
 
-**Shipped in v5.0.0** — language & currency support for both the desktop
+**Shipped in v5.0.x** — language & currency support for both the desktop
 pane and the web dashboard pane:
 
 - **Language toggle** — UI languages DE, EN (default), FR, NL, IT;
   further languages via GitHub issue (*Language request* template)
-- **Currency toggle** — € / $ display for all cost estimates
+- **Currency toggle** — € / $ display for all cost estimates; the
+  histogram's cost-metric icon follows the selection (v5.0.3)
+- Desktop: toggles in the chip menu AND the pane header (v5.0.1+)
 - Both settings persist via `localStorage` and apply to the desktop pane
   and the web dashboard pane alike
 
