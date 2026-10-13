@@ -201,6 +201,17 @@ The gateway's `input` already **excludes** cached tokens
 `input×in + cache_read×cached + output×out`, EUR = USD × 0.85
 (Mistral's own GLM listing: $1.40 ↔ €1.19).
 
+## Roadmap
+
+**v5.0.0 (planned)** — language & currency support for both the desktop
+pane and the web dashboard pane:
+
+- **Language toggle** — UI languages DE, EN (new default), FR, NL, IT;
+  further languages via GitHub issue
+- **Currency toggle** — € / $ display for all cost estimates
+- Both settings persist via `localStorage` and apply to the desktop pane
+  and the web dashboard pane alike
+
 ## Known pitfalls (encoded in blood)
 
 - The plugin loader scans for imports with a **regex over raw source** — a
