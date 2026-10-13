@@ -240,6 +240,19 @@ pane and the web dashboard pane:
 - Both settings persist via `localStorage` and apply to the desktop pane
   and the web dashboard pane alike
 
+**v6.0.0 (planned)** — consumer tracking for external AI stacks via
+LiteLLM:
+
+- Optional integration with a self-hosted [LiteLLM](https://github.com/BerriAI/litellm)
+  proxy: the companion backend reads its Postgres spend logs and the
+  pane shows **consumers** (services that run models OUTSIDE Hermes —
+  e.g. Honcho, Hindsight) as a fourth breakdown section with tokens +
+  cost per service
+- **Fully optional**: this only covers usage that never touches Hermes.
+  Hermes' own usage keeps flowing through the existing state.db ledger,
+  unchanged — a setup without external stacks needs **no LiteLLM and no
+  reconfiguration at all**
+
 ## Known pitfalls (encoded in blood)
 
 - The plugin loader scans for imports with a **regex over raw source** — a
