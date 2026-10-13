@@ -1,7 +1,7 @@
 /**
  * Token Stats — statusbar chip + pane showing per-session token usage.
  *
- * @version v5.0.1
+ * @version v5.0.2
  *
  * Chip: compact live readout of the focused session. Every metric (tokens,
  * cache, context, cost, calls) is toggleable via a click menu on the chip;
@@ -1651,7 +1651,7 @@ function TokenChip() {
       jsxs('button', {
         type: 'button',
         className: 'inline-flex h-full items-center gap-1.5 px-1.5 text-[0.6875rem] text-(--ui-text-tertiary) tabular-nums cursor-pointer hover:text-(--ui-text-secondary)',
-        title: `Token Stats v5.0.1 · Click: configure display · drag header edges to resize pane columns${isPersisted ? ' · 📚 Known-Ledger values (monotonic)' : ''}\n\nInput: ${fmtFull(input)} · Cached: ${fmtFull(cached)}${hitPct != null ? ` (${hitPct}%)` : ''} · Output: ${fmtFull(out)} · Total: ${fmtFull(total)}`
+        title: `Token Stats v5.0.2 · Click: configure display · drag header edges to resize pane columns${isPersisted ? ' · 📚 Known-Ledger values (monotonic)' : ''}\n\nInput: ${fmtFull(input)} · Cached: ${fmtFull(cached)}${hitPct != null ? ` (${hitPct}%)` : ''} · Output: ${fmtFull(out)} · Total: ${fmtFull(total)}`
           + (ctxPct != null && ctxMax > 0 ? `\nContext: ${fmtFull(ctxUsed)} / ${fmtFull(ctxMax)} tokens (${ctxPct}%)` : '')
           + (cost != null ? `\nCost: ${fmtCost(cost)}` : '')
           + (calls > 0 ? `\nAPI calls: ${fmtFull(calls)}` : ''),
@@ -2170,27 +2170,23 @@ function TokenPane() {
             className: 'text-[0.5625rem] uppercase text-(--ui-text-quaternary)',
             style: { letterSpacing: '0.05em', marginLeft: '6px' },
             children: t('menu_currency') }),
-          jsx('div', {
+          jsxs('div', {
             className: 'flex items-center gap-0.5',
-            children: [
-              ['EUR', '€'], ['USD', '$'].map(([c, sym]) => jsx('button', {
-                type: 'button',
-                className: 'px-1.5 py-0.5 rounded-sm text-[0.625rem] cursor-pointer text-center'
-                  + (c === paneCurrency ? ' font-medium' : ' text-(--ui-text-quaternary) hover:text-(--ui-text-secondary)'),
-                style: c === paneCurrency
-                  ? {
-                      background: 'color-mix(in srgb, var(--ui-accent) 25%, transparent)',
-                      color: 'var(--ui-accent)',
-                    }
-                  : undefined,
-                title: t('menu_currency') + ': ' + c,
-                onClick: () => { setCurrency(c) },
-                children: sym,
-              }, 'cur-' + c)) }),
-            ] }),
-        ]
-      }),
-
+            children: [['EUR', '€'], ['USD', '$']].map(([c, sym]) => jsx('button', {
+              type: 'button',
+              className: 'px-1.5 py-0.5 rounded-sm text-[0.625rem] cursor-pointer text-center'
+                + (c === paneCurrency ? ' font-medium' : ' text-(--ui-text-quaternary) hover:text-(--ui-text-secondary)'),
+              style: c === paneCurrency
+                ? {
+                    background: 'color-mix(in srgb, var(--ui-accent) 25%, transparent)',
+                    color: 'var(--ui-accent)',
+                  }
+                : undefined,
+              title: t('menu_currency') + ': ' + c,
+              onClick: () => { setCurrency(c) },
+              children: sym,
+            }, 'cur-' + c)) }),
+          ] }),
       // Aggregate summary — aligned to the session table below (same
       // table-fixed column widths), so each value sits over its column.
       jsx('div', {
