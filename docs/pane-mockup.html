@@ -342,6 +342,21 @@ const header = el('div', 'flex items-center justify-between shrink-0', null, [
   ]),
 ])
 
+// Language + currency segmented toggles (v5.0.0) — second header row,
+// mirrors the chip menu controls of the live plugin (chip menu is not
+// part of the pane mockup; the row shows the feature exists).
+const segBtn = (label, active) => el('button', null,
+  (active
+    ? 'background:color-mix(in srgb, var(--ui-accent) 25%, transparent);color:var(--ui-accent);font-weight:500;'
+    : 'color:var(--ui-text-quaternary);') +
+  'cursor:pointer;font-size:9px;padding:1px 7px;border-radius:2px;', txt(label))
+const langCurRow = el('div', 'flex items-center justify-end gap-2 shrink-0', 'margin-top:2px;', [
+  el('span', 'text-[0.5625rem] uppercase', 'letter-spacing:0.05em;color:var(--ui-text-quaternary);', txt('Language')),
+  el('div', 'flex items-center gap-0.5', null, ['DE', 'EN', 'FR', 'NL', 'IT'].map((l, i) => segBtn(l, i === 1))),
+  el('span', 'text-[0.5625rem] uppercase', 'letter-spacing:0.05em;color:var(--ui-text-quaternary);margin-left:6px;', txt('Currency')),
+  el('div', 'flex items-center gap-0.5', null, [segBtn('€', true), segBtn('$', false)]),
+])
+
 // Summary card
 const summaryRow = el('tr', 'text-quaternary text-[0.625rem] uppercase', null, [
   el('td', null, `width:${W[0]}%`, txt('Total')),
@@ -564,7 +579,7 @@ const footer = el('div', 'shrink-0 text-[0.625rem] text-quaternary text-center p
   txt(` · ${windowLabel()}`),
 ])
 
-pane.append(header, summary, cacheBar, histCard, listWrap, modelList, subList, auxList, footer)
+pane.append(header, langCurRow, summary, cacheBar, histCard, listWrap, modelList, subList, auxList, footer)
 </script>
 </body>
 </html>
