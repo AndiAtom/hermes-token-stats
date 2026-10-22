@@ -32,9 +32,9 @@ let section = src.slice(start, end)
 
 // The section references PRICES_PROVIDER which is defined inside — all
 // self-contained. estimateCost is a function declaration → export via appendix.
-const exportsShim = section + '\nreturn { estimateCost, PRICES, PRICES_PROVIDER, PRICES_OPENROUTER }\n'
+const exportsShim = section + '\nreturn { estimateCost, PRICES, PRICES_PROVIDER, PRICES_OPENROUTER, EU_FACTOR, regionFactor, setTestRegion: (r) => { _region = r } }\n'
 const factory = new Function(exportsShim)
-const { estimateCost, PRICES, PRICES_OPENROUTER } = factory()
+const { estimateCost, PRICES, PRICES_OPENROUTER, EU_FACTOR, regionFactor, setTestRegion } = factory()
 
 // ── provider override beats model-only ─────────────────────────────
 
@@ -96,6 +96,44 @@ test('custom:mistral does not match a mistral provider table', () => {
 test('unknown provider falls back to model-only', () => {
   const c = estimateCost({ model: 'mistral-small-latest', billing_provider: 'some-unknown-relay', input: 1_000_000, cache_read: 0, output: 0 })
   assert.equal(c, 0.15)
+})
+
+// ── EU region factor (v5.1.0) ──────────────────────────────────────
+// The factory exports EU_FACTOR, _region and regionFactor so the toggle
+// can be simulated here: global default, eu = 1.1× on all three rates,
+// unpriced rows stay null under BOTH modes (the factor never fabricates
+// a price), 0.00 stays exactly 0 in eu mode (0 × 1.1 = 0).
+
+test('region factor defaults to global (1×)', () => {
+  assert.equal(regionFactor(), 1)
+  const c = estimateCost({ model: 'zai-glm-latest', input: 1_000_000, cache_read: 0, output: 0 })
+  assert.equal(c, 1.4)
+})
+
+test('eu region multiplies all three rates by EU_FACTOR (1.1×)', () => {
+  setTestRegion('eu')
+  try {
+    // mistral-small-latest: $0.15 in / $0.015 cached / $0.60 out per 1M
+    const c = estimateCost({ model: 'mistral-small-latest', input: 1_000_000, cache_read: 2_000_000, output: 500_000 })
+    const expected = (1 * 0.15 + 2 * 0.015 + 0.5 * 0.60) * EU_FACTOR
+    assert.ok(Math.abs(c - expected) < 1e-9, `got ${c}, expected ${expected}`)
+    // provider-aware path gets the same factor
+    const viaOR = estimateCost({ model: 'z-ai/glm-5.3', billing_provider: 'nous', input: 1_000_000, cache_read: 0, output: 0 })
+    assert.ok(Math.abs(viaOR - 1.4 * EU_FACTOR) < 1e-9, `got ${viaOR}`)
+  } finally {
+    setTestRegion('global')
+  }
+})
+
+test('unpriced rows stay null and free rows stay 0 in eu mode', () => {
+  setTestRegion('eu')
+  try {
+    assert.equal(estimateCost({ model: 'no-such-model-anywhere', input: 1_000_000, cache_read: 0, output: 0 }), null)
+    assert.equal(estimateCost({ model: 'stepfun/step-3.7-flash:free', input: 500_000, cache_read: 100_000, output: 50_000 }), 0)
+    assert.equal(EU_FACTOR, 1.1)
+  } finally {
+    setTestRegion('global')
+  }
 })
 
 // ── free tier ──────────────────────────────────────────────────────

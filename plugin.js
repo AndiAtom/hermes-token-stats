@@ -1,7 +1,7 @@
 /**
  * Token Stats — statusbar chip + pane showing per-session token usage.
  *
- * @version v5.0.3
+ * @version v5.1.0
  *
  * Chip: compact live readout of the focused session. Every metric (tokens,
  * cache, context, cost, calls) is toggleable via a click menu on the chip;
@@ -723,12 +723,31 @@ PRICES_PROVIDER.nous = PRICES_OPENROUTER
 // USD → EUR conversion factor (Mistral La Plateforme lists GLM 5.2 at
 // $1.40 / €1.19 → 0.85). Update when the official EUR listing shifts.
 const EUR_RATE = 0.85
+// v5.1.0: EU-endpoint price toggle. Mistral's api.eu.mistral.ai charges a
+// flat 1.1× on all token prices (verified 2026-10-22, docs.mistral.ai —
+// same ~10% premium OpenAI charges for eu.api.openai.com). The factor is
+// deliberately NOT baked into PRICES: the table stays at global list
+// prices, the active region mode multiplies at the single pricing choke
+// point (estimateCost) so every cost surface (chip, summary, histogram,
+// day separators, lists) flips together.
+const EU_FACTOR = 1.1
+// Active region mode ('global' | 'eu'). Atom (desktop) — the pricing layer
+// must stay SDK-free for test_prices.mjs extraction (it evals everything
+// from `const PRICES = {` to the Helpers marker WITHOUT the plugin-sdk
+// imports; atom() in that range kills the suite). The region is read via
+// a mutable holder that the atom write-through keeps current (same
+// pattern philosophy as the web entry's _lang/_currency holders).
+let _region = 'global'
+function regionFactor() { return _region === 'eu' ? EU_FACTOR : 1 }
 
 // Estimate session cost from usage fields. Returns null when the model is
 // unpriced (never fabricate a number) or usage is missing.
 // v4.5.0: provider-aware lookup — exact billing_provider match first
 // (PRICES_PROVIDER), then model-only (PRICES). Callers pass
 // u.billing_provider when known (ledger rows + session meta carry it).
+// v5.1.0: region-aware — the EU-endpoint premium (EU_FACTOR) applies to
+// the resolved price BEFORE usage is multiplied in. Unpriced rows stay
+// null (factor never fabricates a price), 0.00 stays 0.00.
 function estimateCost(u) {
   if (!u) return null
   const model = String(u.model || '').trim()
@@ -745,7 +764,10 @@ function estimateCost(u) {
   if (!input && !cached && !output) return null
   // "input" from the gateway excludes cache reads (CanonicalUsage.input_tokens
   // is fresh input); bill cached tokens at the cheaper cache-read rate.
-  const cost = (input * p.input + cached * p.cached + output * p.output) / 1_000_000
+  // v5.1.0: EU-region premium applies to the resolved price (all three
+  // rates) — factor BEFORE usage, so the region toggle flips every cost
+  // surface at once.
+  const cost = (input * p.input + cached * p.cached + output * p.output) * regionFactor() / 1_000_000
   return cost
 }
 
@@ -790,6 +812,7 @@ const I18N = {
     menu_display: 'Display',
     menu_language: 'Language',
     menu_currency: 'Currency',
+    menu_region: 'Region (EU endpoint +10%)',
     range_tip_day: 'Today (from 0:00)',
     range_tip_workweek: 'Current workweek: Mon 0:00 – Fri 23:59:59',
     range_tip_week: 'Current calendar week: Mon 0:00 – Sun 23:59:59',
@@ -878,6 +901,7 @@ const I18N = {
     menu_display: 'Display',
     menu_language: 'Language',
     menu_currency: 'Currency',
+    menu_region: 'Region (EU-Endpoint +10%)',
     range_tip_day: 'Heute (ab 0:00 Uhr)',
     range_tip_workweek: 'Laufende Arbeitswoche: Mo 0:00 – Fr 23:59:59',
     range_tip_week: 'Laufende Kalenderwoche: Mo 0:00 – So 23:59:59',
@@ -970,6 +994,7 @@ const I18N = {
     menu_display: 'Display',
     menu_language: 'Language',
     menu_currency: 'Currency',
+    menu_region: 'Région (endpoint UE +10%)',
     range_tip_day: 'Aujourd\u2019hui (à partir de 0:00)',
     range_tip_workweek: 'Semaine de travail en cours : lun. 0:00 – ven. 23:59:59',
     range_tip_week: 'Semaine calendaire en cours : lun. 0:00 – dim. 23:59:59',
@@ -1056,6 +1081,7 @@ const I18N = {
     menu_display: 'Display',
     menu_language: 'Language',
     menu_currency: 'Currency',
+    menu_region: 'Regio (EU-endpoint +10%)',
     range_tip_day: 'Vandaag (vanaf 0:00)',
     range_tip_workweek: 'Lopende werkweek: ma 0:00 – vr 23:59:59',
     range_tip_week: 'Lopende kalenderweek: ma 0:00 – zo 23:59:59',
@@ -1142,6 +1168,7 @@ const I18N = {
     menu_display: 'Display',
     menu_language: 'Language',
     menu_currency: 'Currency',
+    menu_region: 'Regione (endpoint UE +10%)',
     range_tip_day: 'Oggi (dalle 0:00)',
     range_tip_workweek: 'Settimana lavorativa corrente: lun 0:00 – ven 23:59:59',
     range_tip_week: 'Settimana di calendario corrente: lun 0:00 – dom 23:59:59',
@@ -1223,9 +1250,18 @@ const I18N = {
 
 const LANG = atom(initLS('token-stats:lang', LANGS, 'en'))
 const CURRENCY = atom(initLS('token-stats:currency', ['EUR', 'USD'], 'EUR'))
+// v5.1.0: region mode (global list price vs. Mistral EU-endpoint price
+// with the 1.1× premium). Persisted like lang/currency (write-through on
+// toggle) — Andi decision: this is a display preference, not a
+// session-local toggle. Write-through ALSO updates the pricing-layer
+// holder _region (SDK-free read in estimateCost → the pricing test can
+// eval the section without atoms). default 'global'.
+const REGION = atom(initLS('token-stats:region', ['global', 'eu'], 'global'))
+_region = REGION.get()
 
 function setLang(l) { LANG.set(l); lsSet('token-stats:lang', l) }
 function setCurrency(c) { CURRENCY.set(c); lsSet('token-stats:currency', c) }
+function setRegion(r) { REGION.set(r); lsSet('token-stats:region', r); _region = r }
 
 function localeFor(lang) { return LOCALES[lang] || 'en-US' }
 
@@ -1481,6 +1517,8 @@ function ChipMenu() {
   const show = useValue(showMap)
   const lang = useValue(LANG)
   const currency = useValue(CURRENCY)
+  // v5.1.0: region toggle in the chip menu (same atom as the pane header).
+  const region = useValue(REGION)
   // Segmented-control row (language / currency). Active button gets an
   // INLINE accent background — opacity-modified CSS-var utilities and
   // arbitrary-value utilities do NOT paint in the desktop runtime
@@ -1536,6 +1574,13 @@ function ChipMenu() {
       jsx('div', { className: 'flex items-center gap-0.5 px-1', children: [
         segButton('€', currency === 'EUR', () => setCurrency('EUR')),
         segButton('$', currency === 'USD', () => setCurrency('USD')),
+      ] }),
+      // v5.1.0: region toggle (global list price vs. Mistral EU endpoint
+      // with the 1.1× premium) — same segmented style as currency.
+      jsx('div', { className: 'px-2 py-1 mt-1 text-[0.625rem] uppercase text-(--ui-text-quaternary)', children: t('menu_region') }),
+      jsx('div', { className: 'flex items-center gap-0.5 px-1', children: [
+        segButton('🌐', region === 'global', () => setRegion('global')),
+        segButton('EU', region === 'eu', () => setRegion('eu')),
       ] }),
     ],
   })
@@ -1651,7 +1696,7 @@ function TokenChip() {
       jsxs('button', {
         type: 'button',
         className: 'inline-flex h-full items-center gap-1.5 px-1.5 text-[0.6875rem] text-(--ui-text-tertiary) tabular-nums cursor-pointer hover:text-(--ui-text-secondary)',
-        title: `Token Stats v5.0.3 · Click: configure display · drag header edges to resize pane columns${isPersisted ? ' · 📚 Known-Ledger values (monotonic)' : ''}\n\nInput: ${fmtFull(input)} · Cached: ${fmtFull(cached)}${hitPct != null ? ` (${hitPct}%)` : ''} · Output: ${fmtFull(out)} · Total: ${fmtFull(total)}`
+        title: `Token Stats v5.1.0 · Click: configure display · drag header edges to resize pane columns${isPersisted ? ' · 📚 Known-Ledger values (monotonic)' : ''}\n\nInput: ${fmtFull(input)} · Cached: ${fmtFull(cached)}${hitPct != null ? ` (${hitPct}%)` : ''} · Output: ${fmtFull(out)} · Total: ${fmtFull(total)}`
           + (ctxPct != null && ctxMax > 0 ? `\nContext: ${fmtFull(ctxUsed)} / ${fmtFull(ctxMax)} tokens (${ctxPct}%)` : '')
           + (cost != null ? `\nCost: ${fmtCost(cost)}` : '')
           + (calls > 0 ? `\nAPI calls: ${fmtFull(calls)}` : ''),
@@ -1828,6 +1873,9 @@ function TokenPane() {
   // atoms the chip menu drives; unconditional hooks (repo rule).
   const paneLang = useValue(LANG)
   const paneCurrency = useValue(CURRENCY)
+  // v5.1.0: region toggle (same atom the chip menu drives — both surfaces
+  // stay in sync; unconditional hook per repo rule).
+  const paneRegion = useValue(REGION)
 
   const hist = HistoryQuery(range)
   const histOk = hist.data && hist.data.ok
@@ -2186,7 +2234,30 @@ function TokenPane() {
               onClick: () => { setCurrency(c) },
               children: sym,
             }, 'cur-' + c)) }),
-          ] }),
+          // v5.1.0: region toggle (global list price vs. Mistral EU
+          // endpoint at 1.1×) — same segmented style as the currency
+          // buttons, same atom as the chip menu (synced surfaces).
+          jsx('span', {
+            className: 'text-[0.5625rem] uppercase text-(--ui-text-quaternary)',
+            style: { letterSpacing: '0.05em', marginLeft: '6px' },
+            children: t('menu_region') }),
+          jsxs('div', {
+            className: 'flex items-center gap-0.5',
+            children: [['global', '🌐'], ['eu', 'EU']].map(([r, sym]) => jsx('button', {
+              type: 'button',
+              className: 'px-1.5 py-0.5 rounded-sm text-[0.625rem] cursor-pointer text-center'
+                + (r === paneRegion ? ' font-medium' : ' text-(--ui-text-quaternary) hover:text-(--ui-text-secondary)'),
+              style: r === paneRegion
+                ? {
+                    background: 'color-mix(in srgb, var(--ui-accent) 25%, transparent)',
+                    color: 'var(--ui-accent)',
+                  }
+                : undefined,
+              title: t('menu_region') + ': ' + r,
+              onClick: () => { setRegion(r) },
+              children: sym,
+            }, 'reg-' + r)) }),
+        ] }),
       // Aggregate summary — aligned to the session table below (same
       // table-fixed column widths), so each value sits over its column.
       jsx('div', {
