@@ -1,7 +1,7 @@
 /**
  * Token Stats — statusbar chip + pane showing per-session token usage.
  *
- * @version v5.1.0
+ * @version v5.1.1
  *
  * Chip: compact live readout of the focused session. Every metric (tokens,
  * cache, context, cost, calls) is toggleable via a click menu on the chip;
@@ -1696,7 +1696,7 @@ function TokenChip() {
       jsxs('button', {
         type: 'button',
         className: 'inline-flex h-full items-center gap-1.5 px-1.5 text-[0.6875rem] text-(--ui-text-tertiary) tabular-nums cursor-pointer hover:text-(--ui-text-secondary)',
-        title: `Token Stats v5.1.0 · Click: configure display · drag header edges to resize pane columns${isPersisted ? ' · 📚 Known-Ledger values (monotonic)' : ''}\n\nInput: ${fmtFull(input)} · Cached: ${fmtFull(cached)}${hitPct != null ? ` (${hitPct}%)` : ''} · Output: ${fmtFull(out)} · Total: ${fmtFull(total)}`
+        title: `Token Stats v5.1.1 · Click: configure display · drag header edges to resize pane columns${isPersisted ? ' · 📚 Known-Ledger values (monotonic)' : ''}\n\nInput: ${fmtFull(input)} · Cached: ${fmtFull(cached)}${hitPct != null ? ` (${hitPct}%)` : ''} · Output: ${fmtFull(out)} · Total: ${fmtFull(total)}`
           + (ctxPct != null && ctxMax > 0 ? `\nContext: ${fmtFull(ctxUsed)} / ${fmtFull(ctxMax)} tokens (${ctxPct}%)` : '')
           + (cost != null ? `\nCost: ${fmtCost(cost)}` : '')
           + (calls > 0 ? `\nAPI calls: ${fmtFull(calls)}` : ''),
@@ -2234,29 +2234,6 @@ function TokenPane() {
               onClick: () => { setCurrency(c) },
               children: sym,
             }, 'cur-' + c)) }),
-          // v5.1.0: region toggle (global list price vs. Mistral EU
-          // endpoint at 1.1×) — same segmented style as the currency
-          // buttons, same atom as the chip menu (synced surfaces).
-          jsx('span', {
-            className: 'text-[0.5625rem] uppercase text-(--ui-text-quaternary)',
-            style: { letterSpacing: '0.05em', marginLeft: '6px' },
-            children: t('menu_region') }),
-          jsxs('div', {
-            className: 'flex items-center gap-0.5',
-            children: [['global', '🌐'], ['eu', 'EU']].map(([r, sym]) => jsx('button', {
-              type: 'button',
-              className: 'px-1.5 py-0.5 rounded-sm text-[0.625rem] cursor-pointer text-center'
-                + (r === paneRegion ? ' font-medium' : ' text-(--ui-text-quaternary) hover:text-(--ui-text-secondary)'),
-              style: r === paneRegion
-                ? {
-                    background: 'color-mix(in srgb, var(--ui-accent) 25%, transparent)',
-                    color: 'var(--ui-accent)',
-                  }
-                : undefined,
-              title: t('menu_region') + ': ' + r,
-              onClick: () => { setRegion(r) },
-              children: sym,
-            }, 'reg-' + r)) }),
         ] }),
       // Aggregate summary — aligned to the session table below (same
       // table-fixed column widths), so each value sits over its column.
@@ -2268,7 +2245,41 @@ function TokenPane() {
             jsx('tbody', {
               children: [
                 jsxs('tr', { className: 'text-(--ui-text-quaternary) text-[0.625rem] uppercase', children: [
-                  jsx('td', { style: { width: W[0] + '%' }, children: t('summaryTotal') }),
+                  // v5.1.1: region toggle inline in the summary box,
+                  // directly before the TOTAL label (Andi placement
+                  // request — the header row got crowded). Compact 🌐/EU
+                  // segmented buttons; styles identical to the currency
+                  // buttons, sizing matched to the quaternary label row.
+                  jsxs('td', {
+                    style: { width: W[0] + '%' },
+                    children: [
+                      jsxs('span', {
+                        className: 'inline-flex items-center gap-0.5 mr-1 align-middle',
+                        children: [['global', '🌐'], ['eu', 'EU']].map(([r, sym]) => jsx('button', {
+                          type: 'button',
+                          className: 'inline-flex items-center justify-center rounded-sm cursor-pointer align-middle'
+                            + (r === paneRegion
+                              ? ' font-medium'
+                              : ' text-(--ui-text-quaternary) hover:text-(--ui-text-secondary)'),
+                          style: {
+                            width: '16px',
+                            height: '14px',
+                            fontSize: '0.5625rem',
+                            lineHeight: '14px',
+                            padding: '0',
+                            ...(r === paneRegion
+                              ? {
+                                  background: 'color-mix(in srgb, var(--ui-accent) 25%, transparent)',
+                                  color: 'var(--ui-accent)',
+                                }
+                              : {}),
+                          },
+                          title: t('menu_region') + ': ' + r,
+                          onClick: () => { setRegion(r) },
+                          children: sym,
+                        }, 'reg-' + r)) }),
+                      t('summaryTotal'),
+                    ] }),
                   jsx('td', { className: 'text-right px-1 tabular-nums font-medium', style: { width: W[1] + '%' }, children: fmt(grandInput) }),
                   jsx('td', {
                     className: 'text-right px-1 tabular-nums font-medium text-(--ui-accent)', style: { width: W[2] + '%' },
