@@ -34,6 +34,22 @@ AND a row in the pane header (same controls, always in sync) — language
 - **Further languages**: open an issue with the *Language request*
   template — a new language is a dictionary addition, no UI code.
 
+**Region (EU endpoint) toggle (v5.1.x)** — 🌐/EU segmented buttons in the
+aggregate summary box (directly before the TOTAL label) and in the chip
+menu; same atom on both surfaces:
+
+- **🌐 Global (default)**: PAYG-equivalent costs at Mistral's global list
+  prices (api.mistral.ai).
+- **EU**: the premium of Mistral's dedicated EU endpoint
+  (api.eu.mistral.ai) — a flat **1.1×** on all token prices (input,
+  cache-read, output), matching Mistral's EU data-residency pricing.
+- The factor applies at the single pricing choke point, so chip, summary,
+  histogram €-metric, day separators and all breakdown lists flip
+  together. Unpriced rows stay `—`, free models stay `0,00 €` — the
+  factor never fabricates a price.
+- Persisted like language/currency (`token-stats:region`), same key on
+  desktop and web.
+
 Every metric is toggleable via a click menu on the chip (popover, ●/○ state);
 the selection persists via `ctx.storage` (`hermes.plugin.token-stats.chipShow`)
 across app restarts. At least one metric stays visible — hiding all is blocked.
@@ -65,7 +81,8 @@ live-only). Since v4.4:
 
 *Example rendering with sample data (Nord theme): language + currency
 toggles (EN / € active), calendar range presets*
-(1d/5d/7d/30d/∞, 30d active), grand-total summary aligned to the table
+(1d/5d/7d/30d/∞, 30d active), region toggle (🌐/EU) in the grand-total
+summary box, grand-total summary aligned to the table
 columns, ⚡ cache-hit bar, mini histogram (tokens per day over the window),
 collapsible day-group separator rows with per-day totals, focused session
 highlighted with the accent left border. `●` marks a live-only session, `⚠`
@@ -122,6 +139,9 @@ known-ledger backend). It renders as a dashboard page at `/token-stats`:
 - Language and currency toggles in the pane header (since web.1; the
   histogram's cost-metric icon follows the currency since web.2),
   persisted with the same `localStorage` keys as the desktop
+- Region (EU endpoint) toggle in the summary box before the Total label
+  (since web.3 / v5.1.1-web.1), same pricing factor and `localStorage`
+  key as the desktop
 
 No separate install: it deploys with the backend (`install.sh` of the
 [companion repo](https://github.com/AndiAtom/hermes-usage-history-rpc)),
@@ -228,6 +248,17 @@ The gateway's `input` already **excludes** cached tokens
 (Mistral's own GLM listing: $1.40 ↔ €1.19).
 
 ## Roadmap
+
+**Shipped in v5.1.x** — region (EU endpoint) pricing toggle for both the
+desktop pane and the web dashboard pane:
+
+- **Region toggle** — 🌐/EU segmented buttons in the summary box (before
+  the TOTAL label) and in the chip menu; EU mode multiplies all token
+  prices by 1.1 (Mistral's api.eu.mistral.ai premium)
+- Same `localStorage` key on both surfaces (`token-stats:region`);
+  unpriced rows stay `—`, free models stay `0,00 €` in EU mode
+- Web dashboard moved to lockstep versioning with the desktop
+  (v5.1.1 ↔ v5.1.1-web.1)
 
 **Shipped in v5.0.x** — language & currency support for both the desktop
 pane and the web dashboard pane:

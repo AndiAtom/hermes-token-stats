@@ -358,8 +358,19 @@ const langCurRow = el('div', 'flex items-center justify-end gap-2 shrink-0', 'ma
 ])
 
 // Summary card
+// v5.1.1: region toggle (🌐/EU) inline before the Total label — compact
+// 16×14px buttons, verbatim port of the live plugin's summary-box toggle
+// (v5.1.0 put it in the header row; v5.1.1 moved it here on request).
+const regBtn = (label, active) => el('button', null,
+  (active
+    ? 'background:color-mix(in srgb, var(--ui-accent) 25%, transparent);color:var(--ui-accent);font-weight:500;'
+    : 'color:var(--ui-text-quaternary);') +
+  'cursor:pointer;font-size:9px;line-height:14px;width:16px;height:14px;padding:0;border-radius:2px;text-align:center;vertical-align:middle;', txt(label))
 const summaryRow = el('tr', 'text-quaternary text-[0.625rem] uppercase', null, [
-  el('td', null, `width:${W[0]}%`, txt('Total')),
+  el('td', null, `width:${W[0]}%`, [
+    el('span', 'inline-flex items-center gap-0.5 align-middle', 'margin-right:4px;vertical-align:middle;', [
+      regBtn('🌐', true), regBtn('EU', false)]),
+    txt('Total')]),
   el('td', 'text-right px-1 tabular-nums font-medium', `width:${W[1]}%`, txt(fmt(grandInput))),
   el('td', 'text-right px-1 tabular-nums font-medium text-accent', `width:${W[2]}%`,
     txt(fmt(grandCached))),
