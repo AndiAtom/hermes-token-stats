@@ -250,6 +250,20 @@ The gateway's `input` already **excludes** cached tokens
 
 ## Roadmap
 
+**Shipped in v5.2.0** — server-side window aggregation (fixes silently
+shrinking window totals):
+
+- **Why:** the pane queried `/ledger` with `limit=200` and summed the
+  returned `sessions[]` — but the backend sorts by activity and cuts at
+  `limit`, so every new session pushed old (expensive) ones out of the
+  window sum (observed: top-200 sum 111.61 € vs 120.03 € full window)
+- **Fix:** the backend (≥ v0.7.0, `totals=1` param) aggregates the FULL
+  window server-side before the limit cut; summary totals, cost and the
+  footer session count come from `totals` and are limit-independent
+- The session display list stays capped at 200; costs are still priced
+  client-side from `totals.by_model` (the server stays price-free)
+- New i18n key `windowSessions` (footer session-count tooltip)
+
 **Shipped in v5.1.x** — region (EU endpoint) pricing toggle for both the
 desktop pane and the web dashboard pane:
 
