@@ -1,7 +1,7 @@
 /**
  * Token Stats — statusbar chip + pane showing per-session token usage.
  *
- * @version v5.2.0
+ * @version v5.2.1
  *
  * Chip: compact live readout of the focused session. Every metric (tokens,
  * cache, context, cost, calls) is toggleable via a click menu on the chip;
@@ -1702,7 +1702,7 @@ function TokenChip() {
       jsxs('button', {
         type: 'button',
         className: 'inline-flex h-full items-center gap-1.5 px-1.5 text-[0.6875rem] text-(--ui-text-tertiary) tabular-nums cursor-pointer hover:text-(--ui-text-secondary)',
-        title: `Token Stats v5.2.0 · Click: configure display · drag header edges to resize pane columns${isPersisted ? ' · 📚 Known-Ledger values (monotonic)' : ''}\n\nInput: ${fmtFull(input)} · Cached: ${fmtFull(cached)}${hitPct != null ? ` (${hitPct}%)` : ''} · Output: ${fmtFull(out)} · Total: ${fmtFull(total)}`
+        title: `Token Stats v5.2.1 · Click: configure display · drag header edges to resize pane columns${isPersisted ? ' · 📚 Known-Ledger values (monotonic)' : ''}\n\nInput: ${fmtFull(input)} · Cached: ${fmtFull(cached)}${hitPct != null ? ` (${hitPct}%)` : ''} · Output: ${fmtFull(out)} · Total: ${fmtFull(total)}`
           + (ctxPct != null && ctxMax > 0 ? `\nContext: ${fmtFull(ctxUsed)} / ${fmtFull(ctxMax)} tokens (${ctxPct}%)` : '')
           + (cost != null ? `\nCost: ${fmtCost(cost)}` : '')
           + (calls > 0 ? `\nAPI calls: ${fmtFull(calls)}` : ''),
@@ -1812,8 +1812,13 @@ function HistoryQuery(range) {
       // v5.2.0: totals=1 — the backend aggregates the FULL window
       // server-side (BEFORE the limit cut), so the summary grand totals
       // no longer shrink when new sessions push old ones out of the
-      // top-200 display list. limit stays 200 for sessions[] (list only).
-      const led = await fetchLedger({ since: win.since, until: win.until, days: 0, limit: 200, totals: 1 })
+      // top-200 display list.
+      // v5.2.1: limit 200 → 2000 — the display list itself was silently
+      // dropping the oldest days of a busy window (18 sessions of Oct 1
+      // invisible: the activity-sorted cut fell INSIDE the window, so
+      // the day group vanished and the histogram undercounted). 2000
+      // covers months of sessions; sessions[] is only the display list.
+      const led = await fetchLedger({ since: win.since, until: win.until, days: 0, limit: 2000, totals: 1 })
       if (led && Array.isArray(led.sessions)) {
         return { ok: true, res: led, source: 'ledger' }
       }
