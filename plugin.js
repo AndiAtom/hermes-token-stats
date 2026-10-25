@@ -1,7 +1,7 @@
 /**
  * Token Stats — statusbar chip + pane showing per-session token usage.
  *
- * @version v5.1.2
+ * @version v5.2.0
  *
  * Chip: compact live readout of the focused session. Every metric (tokens,
  * cache, context, cost, calls) is toggleable via a click menu on the chip;
@@ -865,6 +865,7 @@ const I18N = {
     auxUnpricedNote: '(≈ — unpriced rows excluded)',
     noCostDay: 'No cost for this day',
     grandTotalTip: (cost) => `Known-Ledger, monotonic · Estimated: ${cost}`,
+    windowSessions: 'Sessions in window',
     noPrice: 'no price',
     totalTokens: 'Total tokens',
     auxBgReview: 'Background review',
@@ -958,6 +959,7 @@ const I18N = {
     // Today's DE summary tooltip is mixed ('Estimated:' stays English) —
     // byte-identical rule, do not germanize.
     grandTotalTip: (cost) => `Known-Ledger, monoton · Estimated: ${cost}`,
+    windowSessions: 'Sitzungen im Fenster',
     noPrice: 'kein Preis',
     totalTokens: 'Gesamttokens',
     auxBgReview: 'Hintergrund-Review',
@@ -1045,6 +1047,7 @@ const I18N = {
     auxUnpricedNote: '(≈ — lignes non tarifées exclues)',
     noCostDay: 'Aucun coût pour ce jour',
     grandTotalTip: (cost) => `Known-Ledger, monotone · Estimé : ${cost}`,
+    windowSessions: 'Sessions dans la fenêtre',
     noPrice: 'pas de prix',
     totalTokens: 'Total tokens',
     auxBgReview: 'Revue en arrière-plan',
@@ -1132,6 +1135,7 @@ const I18N = {
     auxUnpricedNote: '(≈ — unpriced rijen uitgesloten)',
     noCostDay: 'Geen kosten voor deze dag',
     grandTotalTip: (cost) => `Known-Ledger, monotonic · Geschat: ${cost}`,
+    windowSessions: 'Sessies in venster',
     noPrice: 'geen prijs',
     totalTokens: 'Totaal tokens',
     auxBgReview: 'Achtergrondreview',
@@ -1219,6 +1223,7 @@ const I18N = {
     auxUnpricedNote: '(≈ — righe non prezzate escluse)',
     noCostDay: 'Nessun costo per questo giorno',
     grandTotalTip: (cost) => `Known-Ledger, monotono · Stimato: ${cost}`,
+    windowSessions: 'Sessioni nella finestra',
     noPrice: 'nessun prezzo',
     totalTokens: 'Tokens totali',
     auxBgReview: 'Revisione in background',
@@ -1697,7 +1702,7 @@ function TokenChip() {
       jsxs('button', {
         type: 'button',
         className: 'inline-flex h-full items-center gap-1.5 px-1.5 text-[0.6875rem] text-(--ui-text-tertiary) tabular-nums cursor-pointer hover:text-(--ui-text-secondary)',
-        title: `Token Stats v5.1.2 · Click: configure display · drag header edges to resize pane columns${isPersisted ? ' · 📚 Known-Ledger values (monotonic)' : ''}\n\nInput: ${fmtFull(input)} · Cached: ${fmtFull(cached)}${hitPct != null ? ` (${hitPct}%)` : ''} · Output: ${fmtFull(out)} · Total: ${fmtFull(total)}`
+        title: `Token Stats v5.2.0 · Click: configure display · drag header edges to resize pane columns${isPersisted ? ' · 📚 Known-Ledger values (monotonic)' : ''}\n\nInput: ${fmtFull(input)} · Cached: ${fmtFull(cached)}${hitPct != null ? ` (${hitPct}%)` : ''} · Output: ${fmtFull(out)} · Total: ${fmtFull(total)}`
           + (ctxPct != null && ctxMax > 0 ? `\nContext: ${fmtFull(ctxUsed)} / ${fmtFull(ctxMax)} tokens (${ctxPct}%)` : '')
           + (cost != null ? `\nCost: ${fmtCost(cost)}` : '')
           + (calls > 0 ? `\nAPI calls: ${fmtFull(calls)}` : ''),
@@ -1803,8 +1808,12 @@ function HistoryQuery(range) {
   return useQuery({
     queryKey: [ID, 'knownHistory', win.since, win.until],
     queryFn: async () => {
-      // 1st choice: known-ledger backend (ctx.rest namespace)
-      const led = await fetchLedger({ since: win.since, until: win.until, days: 0, limit: 200 })
+      // 1st choice: known-ledger backend (ctx.rest namespace).
+      // v5.2.0: totals=1 — the backend aggregates the FULL window
+      // server-side (BEFORE the limit cut), so the summary grand totals
+      // no longer shrink when new sessions push old ones out of the
+      // top-200 display list. limit stays 200 for sessions[] (list only).
+      const led = await fetchLedger({ since: win.since, until: win.until, days: 0, limit: 200, totals: 1 })
       if (led && Array.isArray(led.sessions)) {
         return { ok: true, res: led, source: 'ledger' }
       }
@@ -2130,16 +2139,40 @@ function TokenPane() {
   const histMax = histMetricVal === 'cost' ? histMaxCost : histMaxTokens
 
   // Aggregate over the unified rows (persistent = all rows in window).
-  const grandInput = rows.reduce((s, r) => s + (r.u.input || 0), 0)
-  const grandCached = rows.reduce((s, r) => s + (r.u.cache_read || 0), 0)
-  const grandOutput = rows.reduce((s, r) => s + (r.u.output || 0), 0)
+  // v5.2.0: with the ledger backend's totals=1 the server has already
+  // aggregated the FULL window (limit-independent — the display list is
+  // capped at 200 sessions, the window is not). Server totals win;
+  // the local rows-reduce stays as the fallback (RPC mode / old backend
+  // versions without the totals param).
+  const ledTotals = histOk && hist.data.source === 'ledger'
+    && hist.data.res.totals ? hist.data.res.totals : null
+  const grandInput = ledTotals ? ledTotals.input_tokens
+    : rows.reduce((s, r) => s + (r.u.input || 0), 0)
+  const grandCached = ledTotals ? ledTotals.cache_read_tokens
+    : rows.reduce((s, r) => s + (r.u.cache_read || 0), 0)
+  const grandOutput = ledTotals ? ledTotals.output_tokens
+    : rows.reduce((s, r) => s + (r.u.output || 0), 0)
   // Sum of per-row cost estimates (null-safe: unpriced models contribute 0,
   // but we remember whether ANY row was unpriced so the total can show a ≈).
+  // v5.2.0: priced from the server's by_model breakdown (limit-independent,
+  // same estimateCost choke point — region/currency toggles apply as usual).
   let grandCost = 0
   let unpricedRows = 0
-  for (const r of rows) {
-    const c = estimateCost({ input: r.u.input, cache_read: r.u.cache_read, output: r.u.output, model: r.u.model, billing_provider: r.u.billing_provider })
-    if (c != null) grandCost += c; else if ((r.u.input || 0) + (r.u.output || 0) > 0) unpricedRows++
+  if (ledTotals) {
+    for (const m of (ledTotals.by_model || [])) {
+      const c = estimateCost({
+        input: m.input_tokens, cache_read: m.cache_read_tokens,
+        output: m.output_tokens, model: m.model,
+        billing_provider: m.billing_provider,
+      })
+      if (c != null) grandCost += c
+      else if ((m.input_tokens || 0) + (m.output_tokens || 0) > 0) unpricedRows++
+    }
+  } else {
+    for (const r of rows) {
+      const c = estimateCost({ input: r.u.input, cache_read: r.u.cache_read, output: r.u.output, model: r.u.model, billing_provider: r.u.billing_provider })
+      if (c != null) grandCost += c; else if ((r.u.input || 0) + (r.u.output || 0) > 0) unpricedRows++
+    }
   }
 
   return jsxs('div', {
@@ -2780,10 +2813,15 @@ function TokenPane() {
 
       // Footer: session/model counts + active calendar window. The model
       // count is a toggle for the per-model list above.
+      // v5.2.0: with ledger totals the session count covers the FULL
+      // window (totals.sessions), not just the limited display list.
       jsxs('div', {
         className: 'shrink-0 text-[0.625rem] text-(--ui-text-quaternary) text-center pt-1',
         children: [
-          `${rows.length} ${t('sessions', rows.length)} · `,
+          jsxs('span', {
+            title: ledTotals ? t('windowSessions') : undefined,
+            children: `${ledTotals ? ledTotals.sessions : rows.length} ${t('sessions', ledTotals ? ledTotals.sessions : rows.length)} · `,
+          }, 'sessionCount'),
           jsxs('button', {
             type: 'button',
             title: modelListOpenVal
