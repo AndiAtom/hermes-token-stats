@@ -1,5 +1,9 @@
 # hermes-token-stats
 
+<p align="center">
+  <img src="docs/token-stats-icon.svg" width="96" alt="Token Stats icon" />
+</p>
+
 Hermes Desktop plugin: statusbar chip + pane for per-session token usage.
 
 ## Features
