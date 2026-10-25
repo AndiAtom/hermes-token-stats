@@ -99,6 +99,31 @@ estimate).*
 > Regenerate: render the HTML in a browser at 380px width, device pixel
 > ratio 2, and capture the `#pane` element.
 
+## Data availability — mid-month installs
+
+> [!IMPORTANT]
+> **The ledger records from its first start — it does not backfill.**
+> The daemon polls live and accumulates; it never imports historical
+> usage that predates its installation. Every view is affected — there
+> is no view whose numbers are complete from day one:
+>
+> - **Calendar presets (1d / 5d / 7d / 30d / ∞)**: a window is only
+>   complete where it lies entirely after the ledger's first start.
+>   The `30d` running-month view becomes fully trustworthy only once
+>   a **month boundary has passed since the ledger's first start**;
+>   installed mid-month (e.g. Oct 15), the early days of the window
+>   are absent or undercounted. The `∞` view shows the same leading
+>   gap until the ledger has run long enough; `1d/5d/7d` recover
+>   first — as soon as their window lies entirely after the install.
+> - **Summary totals & costs**: exact for the ledger-covered portion
+>   of a window, undercounted for the days before it.
+> - **Per-session lifetime totals** in the sessions table: the first
+>   poll baselines `known = live` (current `state.db` values), so
+>   pre-ledger sessions start with their values as of the install —
+>   usage from before the install that survived in `state.db` is
+>   included, but usage that `state.db` already lost to
+>   compression resets before the ledger existed is not.
+
 ## Install
 
 **Requires the companion gateway module**
