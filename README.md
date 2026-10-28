@@ -216,7 +216,7 @@ to the model-only path, because a custom provider relay can bill differently.
 
 | Table | Source | Scope |
 |---|---|---|
-| `PRICES` | <https://docs.mistral.ai/inference/pricing> (verified 2026-10-24) | Mistral-hosted models + fixed aliases, 44 entries |
+| `PRICES` | <https://docs.mistral.ai/inference/pricing> (verified 2026-10-28) | Mistral-hosted models + fixed aliases, 45 entries |
 | `PRICES_OPENROUTER` | `openrouter.ai/api/v1/models` (generated 2026-10-04) | 459 curated models — text-in/text-out, priced or free, not expired; OR routing models excluded (no own price) |
 | `PRICES_PROVIDER.nous` | OpenRouter catalog (Nous publishes no machine-readable list) | same table, separately overridable when Nous' own pricing deviates |
 
@@ -251,12 +251,13 @@ against the live `/v1/models` API:
 | Audio | Voxtral Small (`voxtral-small-latest`)¹ | 0.10 | 0.01 | 0.30 |
 | Third-party | Z.ai GLM 5.3 / 5.2 (`zai-glm-latest`) | 1.40 | 0.14 | 4.40 |
 | | Z.ai GLM 5.3 Flash (`zai-glm-5-3-flash`) | 0.15 | 0.03 | 0.50 |
+| | DeepSeek V4.1 Flash 1017 (`deepseek-v4-1-flash-1017`) | 0.30 | 0.007 | 1.20 |
 | Embeddings | Codestral Embed / Mistral Embed | 0.15 / 0.10 | 10% of input | — (input-only) |
 | Free | Leanstral 1.5, Mistral Moderation 2 | 0.00 | 0.00 | 0.00 |
 
 Fixed-version API aliases (e.g. `mistral-medium-2604`, `ministral-8b-2512`,
 `codestral-2508`, `zai-glm-5-3`) are priced identically to their `-latest`
-aliases — 44 entries total in `PRICES`.
+aliases — 45 entries total in `PRICES`.
 
 ¹ *Magistral is deprecated on the API (replacements: Medium 3.5 / Small 4) —
 legacy list prices, no longer on the official page. Voxtral Small likewise
@@ -271,7 +272,7 @@ preview pricing expires, list prices don't.*
 Voxtral Mini Transcribe ($/min), Voxtral TTS ($/M chars), Mistral OCR ($/1000
 pages). Devstral was fully retired from the API and is absent.
 
-Verified against <https://docs.mistral.ai/inference/pricing> (2026-09-19).
+Verified against <https://docs.mistral.ai/inference/pricing> (2026-10-28).
 The gateway's `input` already **excludes** cached tokens
 (`input = prompt_total − cache_read − cache_write`), so the estimate is
 `input×in + cache_read×cached + output×out`, EUR = USD × 0.85
