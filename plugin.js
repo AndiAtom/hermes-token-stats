@@ -1,7 +1,7 @@
 /**
  * Token Stats — statusbar chip + pane showing per-session token usage.
  *
- * @version v5.2.1
+ * @version v5.2.2
  *
  * Chip: compact live readout of the focused session. Every metric (tokens,
  * cache, context, cost, calls) is toggleable via a click menu on the chip;
@@ -197,6 +197,7 @@ const PRICES = {
   'zai-glm-5-2': { input: 1.40, cached: 0.14, output: 4.40 },
   'zai-glm-5': { input: 1.40, cached: 0.14, output: 4.40 },      // API alias, same listing
   'zai-glm-5-3-flash': { input: 0.15, cached: 0.03, output: 0.50 },  // Z.ai GLM 5.3 Flash, official listing 24.10.2026
+  'deepseek-v4-1-flash-1017': { input: 0.30, cached: 0.007, output: 1.20 },  // DeepSeek V4.1 Flash 1017, official listing 28.10.2026 (Public Preview, regular list price — no sale)
   'glm-5-2': { input: 1.40, cached: 0.14, output: 4.40 },
   // Nous Inference API (inference-api.nousresearch.com) serves OpenRouter-style
   // model IDs. Andi decision 2026-09-30: price with MISTRAL's own list prices,
@@ -1702,7 +1703,7 @@ function TokenChip() {
       jsxs('button', {
         type: 'button',
         className: 'inline-flex h-full items-center gap-1.5 px-1.5 text-[0.6875rem] text-(--ui-text-tertiary) tabular-nums cursor-pointer hover:text-(--ui-text-secondary)',
-        title: `Token Stats v5.2.1 · Click: configure display · drag header edges to resize pane columns${isPersisted ? ' · 📚 Known-Ledger values (monotonic)' : ''}\n\nInput: ${fmtFull(input)} · Cached: ${fmtFull(cached)}${hitPct != null ? ` (${hitPct}%)` : ''} · Output: ${fmtFull(out)} · Total: ${fmtFull(total)}`
+        title: `Token Stats v5.2.2 · Click: configure display · drag header edges to resize pane columns${isPersisted ? ' · 📚 Known-Ledger values (monotonic)' : ''}\n\nInput: ${fmtFull(input)} · Cached: ${fmtFull(cached)}${hitPct != null ? ` (${hitPct}%)` : ''} · Output: ${fmtFull(out)} · Total: ${fmtFull(total)}`
           + (ctxPct != null && ctxMax > 0 ? `\nContext: ${fmtFull(ctxUsed)} / ${fmtFull(ctxMax)} tokens (${ctxPct}%)` : '')
           + (cost != null ? `\nCost: ${fmtCost(cost)}` : '')
           + (calls > 0 ? `\nAPI calls: ${fmtFull(calls)}` : ''),
