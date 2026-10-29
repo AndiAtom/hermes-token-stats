@@ -1,7 +1,7 @@
 /**
  * Token Stats — statusbar chip + pane showing per-session token usage.
  *
- * @version v5.2.2
+ * @version v5.2.3
  *
  * Chip: compact live readout of the focused session. Every metric (tokens,
  * cache, context, cost, calls) is toggleable via a click menu on the chip;
@@ -157,11 +157,14 @@ function Th(i, className, children, title, sortKey) {
 // table when switching models. Cache reads are billed instead of full input.
 const PRICES = {
   // ── Premier frontier (docs.mistral.ai/inference/pricing, verified 2026-09-19) ──
-  // ── Mistral Large 4 "le Chonk" (verified 2026-10-07: list price;
-  //    public-preview sale is $0.68/$0.07/$2.09 — we track the regular list,
-  //    same policy as every other row) ──
-  'mistral-large-4-0': { input: 1.36, cached: 0.14, output: 4.18 },      // 1.05T MoE, 52B active
-  'mistral-large-4': { input: 1.36, cached: 0.14, output: 4.18 },        // API alias → -0
+  // ── Mistral Large 4 "le Chonk" (open-weights GA 29.10.2026: list price cut from
+  //    $1.36/$0.14/$4.18 to $0.7/$0.07/$2.1 — verified on pricing page (no
+  //    strikethrough) + Unite.AI release coverage of the weights drop; launch
+  //    sale was $0.68/$0.07/$2.09, expired ~20.10.) ──
+  'mistral-large-4-0': { input: 0.70, cached: 0.07, output: 2.10 },      // 1.05T MoE, 52B active
+  'mistral-large-4': { input: 0.70, cached: 0.07, output: 2.10 },        // API alias → -0
+  'mistral-large-4-0-8': { input: 0.70, cached: 0.07, output: 2.10 },    // ML4 4.0.8 "Patchstral" checkpoint, billing → mistral-large-4-0-a
+  'mistral-large-4-0-8-fp4': { input: 0.70, cached: 0.07, output: 2.10 }, // NVFP4 variant, API alias of -0-8
   'mistral-large-latest': { input: 0.50, cached: 0.05, output: 1.50 },    // Mistral Large 3
   'mistral-large-2512': { input: 0.50, cached: 0.05, output: 1.50 },
   'mistral-medium-latest': { input: 1.50, cached: 0.15, output: 7.50 },   // Mistral Medium 3.5
@@ -1703,7 +1706,7 @@ function TokenChip() {
       jsxs('button', {
         type: 'button',
         className: 'inline-flex h-full items-center gap-1.5 px-1.5 text-[0.6875rem] text-(--ui-text-tertiary) tabular-nums cursor-pointer hover:text-(--ui-text-secondary)',
-        title: `Token Stats v5.2.2 · Click: configure display · drag header edges to resize pane columns${isPersisted ? ' · 📚 Known-Ledger values (monotonic)' : ''}\n\nInput: ${fmtFull(input)} · Cached: ${fmtFull(cached)}${hitPct != null ? ` (${hitPct}%)` : ''} · Output: ${fmtFull(out)} · Total: ${fmtFull(total)}`
+        title: `Token Stats v5.2.3 · Click: configure display · drag header edges to resize pane columns${isPersisted ? ' · 📚 Known-Ledger values (monotonic)' : ''}\n\nInput: ${fmtFull(input)} · Cached: ${fmtFull(cached)}${hitPct != null ? ` (${hitPct}%)` : ''} · Output: ${fmtFull(out)} · Total: ${fmtFull(total)}`
           + (ctxPct != null && ctxMax > 0 ? `\nContext: ${fmtFull(ctxUsed)} / ${fmtFull(ctxMax)} tokens (${ctxPct}%)` : '')
           + (cost != null ? `\nCost: ${fmtCost(cost)}` : '')
           + (calls > 0 ? `\nAPI calls: ${fmtFull(calls)}` : ''),
