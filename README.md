@@ -240,7 +240,7 @@ against the live `/v1/models` API:
 
 | Family | Model | Input | Cached | Output |
 |---|---|---|---|---|
-| Premier | Mistral Large 4 (`mistral-large-4`, `mistral-large-4-0`)² | 1.36 | 0.14 | 4.18 |
+| Premier | Mistral Large 4 (`mistral-large-4`, `mistral-large-4-0`, `mistral-large-4-0-8`(-`fp4`))² | 0.70 | 0.07 | 2.10 |
 | | Mistral Large 3 (`mistral-large-latest`) | 0.50 | 0.05 | 1.50 |
 | | Mistral Medium 3.5 (`mistral-medium-latest`) | 1.50 | 0.15 | 7.50 |
 | | Mistral Small 4 (`mistral-small-latest`) | 0.15 | 0.015 | 0.60 |
