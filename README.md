@@ -106,6 +106,14 @@ compiled Tailwind CSS, so the entry injects its own namespaced `.ts-*`
 stylesheet built on the dashboard theme variables (`--midground-base` etc.)
 and follows the active theme. No Tailwind classes are used.
 
+> **Note — a third surface exists:** since Hermes ≥ v0.22.6 the gateway
+> can also serve the **WebApp** (the full desktop bundle in the browser,
+> port 9120). There the *desktop* plugin itself (`plugin.js` from the
+> companion repo) runs as-is — pane and chip already work there
+> (rudimentary). That surface does not use `web-entry.js`; the ledger
+> backend answers unchanged. Smoothed WebApp support is roadmapped as
+> client v5.3 (see the [companion repo's roadmap](https://github.com/AndiAtom/hermes-token-stats#roadmap)).
+
 | Scope | Web port |
 |---|---|
 | Presets, summary, histogram, day groups, breakdowns, anomaly flags | ✔ |
@@ -305,6 +313,18 @@ backend itself (ledger daemon, routes) is unchanged — only
 via `localStorage` (`token-stats:lang` / `token-stats:currency`) — same
 keys as the desktop. Since web.2 the histogram's cost-metric toggle icon
 follows the active currency (€/$) instead of a hardcoded €.
+
+**v0.8.0 (planned, alongside client v5.3)** — **Hermes WebApp support**
+(the browser-hosted desktop served by the gateway, Hermes ≥ v0.22.6).
+Status quo: the desktop plugin (`plugin.js`) already renders and works in
+the WebApp as-is — pane and chip — when it is installed on the gateway
+host (`~/.hermes/desktop-plugins/token-stats/`). The backend (ledger
+daemon, routes, web entry) is **unchanged** by any of this today; the
+roadmapped work (mobile-friendly pane UI, a documented one-step install
+path) is client-side and tracked in the
+[client repo's v5.3 roadmap entry](https://github.com/AndiAtom/hermes-token-stats#roadmap).
+A backend release only becomes necessary if the install flow ends up
+touching `install.sh` or the plugin package.
 
 **macOS (planned — once I get my hands on a Mac)** — the ledger core
 (`ledger/engine.py`, `poller.py`, `daemon.py`) is pure Python stdlib and
