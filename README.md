@@ -176,6 +176,30 @@ No separate install: it deploys with the backend (`install.sh` of the
 [companion repo](https://github.com/AndiAtom/hermes-usage-history-rpc)),
 then the dashboard serves it automatically.
 
+## Hermes WebApp pane (early support)
+
+Since Hermes v0.22.6 the gateway can also serve the **WebApp** — the full
+desktop bundle in the browser (gateway port 9120), a third surface next to
+the packaged desktop app and the web dashboard. The desktop plugin runs
+there **as-is**: pane and statusbar chip render and work in the WebApp
+already (rudimentary — first-class support is planned for v5.3, see
+roadmap).
+
+Install is manual for now (v5.3 will document and smooth this path):
+
+```bash
+# on the machine running the gateway (the Hermes host):
+mkdir -p ~/.hermes/desktop-plugins/token-stats
+cp plugin.js ~/.hermes/desktop-plugins/token-stats/plugin.js
+# then reload the WebApp in the browser
+```
+
+Unlike the packaged desktop app — which loads plugins from **its own**
+disk, so a remote copy does nothing — the WebApp loads desktop plugins
+from the **gateway host's** `~/.hermes/desktop-plugins/`. Installing on
+the Hermes host is all it takes; the ledger backend answers on the same
+host, so `ctx.rest` works unchanged.
+
 ## Data flow (known / live / max)
 
 ```
@@ -319,6 +343,20 @@ pane and the web dashboard pane:
 - Desktop: toggles in the chip menu AND the pane header (v5.0.1+)
 - Both settings persist via `localStorage` and apply to the desktop pane
   and the web dashboard pane alike
+
+**v5.3.0 (planned)** — smoother support for the **Hermes WebApp** (the
+browser-hosted desktop served by the gateway, Hermes ≥ v0.22.6). The pane
+and chip already render and work in the WebApp as-is (see *Hermes WebApp
+pane* above); v5.3 turns that into first-class support:
+
+- **Mobile interface** — the WebApp is the natural surface for phones;
+  the pane needs responsive treatment for small screens (the fixed 380px
+  desktop-pane geometry does not translate to a phone browser)
+- **Documented, smooth install path** — today the WebApp pane is
+  installed by manually copying `plugin.js` to
+  `~/.hermes/desktop-plugins/token-stats/` on the Hermes host and
+  reloading the WebApp; v5.3 documents this path properly and makes it
+  a one-step flow
 
 **v6.0.0 (planned)** — consumer tracking for external AI stacks via
 LiteLLM:
