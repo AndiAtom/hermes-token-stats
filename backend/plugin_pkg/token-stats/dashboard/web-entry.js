@@ -1911,7 +1911,7 @@
     return h('div', { className: 'tsweb', title: `Token Stats ${VERSION} · ${t('webPortTitle')}` },
       // Header + history window selector
       h('div', { className: 'ts-head' },
-        h('span', { className: 'ts-title' }, 'Token Stats'),
+        h('span', { className: 'ts-title' }, 'Token Stats Ledger'),
         h('div', { className: 'ts-headbtns' },
           ledger && !ledgerOk
             ? h('span', {

@@ -1778,7 +1778,7 @@ function TokenChip() {
       jsxs('button', {
         type: 'button',
         className: 'inline-flex h-full items-center gap-1.5 px-1.5 text-[0.6875rem] text-(--ui-text-tertiary) tabular-nums cursor-pointer hover:text-(--ui-text-secondary)',
-        title: `Token Stats v5.2.4 · Click: configure display · drag header edges to resize pane columns${isPersisted ? ' · 📚 Known-Ledger values (monotonic)' : ''}\n\nInput: ${fmtFull(input)} · Cached: ${fmtFull(cached)}${hitPct != null ? ` (${hitPct}%)` : ''} · Output: ${fmtFull(out)} · Total: ${fmtFull(total)}`
+        title: `Token Stats Ledger v1.0.0 · Click: configure display · drag header edges to resize pane columns${isPersisted ? ' · 📚 Known-Ledger values (monotonic)' : ''}\n\nInput: ${fmtFull(input)} · Cached: ${fmtFull(cached)}${hitPct != null ? ` (${hitPct}%)` : ''} · Output: ${fmtFull(out)} · Total: ${fmtFull(total)}`
           + (ctxPct != null && ctxMax > 0 ? `\nContext: ${fmtFull(ctxUsed)} / ${fmtFull(ctxMax)} tokens (${ctxPct}%)` : '')
           + (cost != null ? `\nCost: ${fmtCost(cost)}` : '')
           + (calls > 0 ? `\nAPI calls: ${fmtFull(calls)}` : ''),
@@ -2263,7 +2263,7 @@ function TokenPane() {
       jsxs('div', {
         className: 'flex items-center justify-between shrink-0',
         children: [
-          jsx('span', { className: 'font-medium text-sm', children: 'Token Stats' }),
+          jsx('span', { className: 'font-medium text-sm', children: 'Token Stats Ledger' }),
           jsxs('div', { className: 'flex items-center gap-1.5', children: [
             histOk === false
               ? jsx('span', {
@@ -2974,7 +2974,7 @@ function TokenPane() {
 
 export default {
   id: ID,
-  name: 'Token Stats',
+  name: 'Token Stats Ledger',
   register(ctx) {
     // Known-ledger backend handle (namespace /api/plugins/token-stats/ —
     // our own ID, so ctx.rest can reach it). Null-safe: fetchLedger falls
@@ -3052,7 +3052,7 @@ export default {
     ctx.register({
       id: 'pane',
       area: 'panes',
-      title: 'Token Stats',
+      title: 'Token Stats Ledger',
       data: { placement: 'right', width: '380px' },
       render: () => jsx(TokenPane, {})
     })
