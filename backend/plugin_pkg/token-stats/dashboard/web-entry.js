@@ -747,6 +747,61 @@
   let _region = 'global'
   function regionFactor() { return _region === 'eu' ? EU_FACTOR : 1 }
 
+  // ── User price overrides (v1.0.0) — verbatim port from plugin.js ────
+  // Same semantics: user keys override built-in keys at every level of
+  // the specificity chain (provider-user → provider-built-in →
+  // model-user → model-built-in). Loaded async from backend /prices;
+  // holders stay empty (built-in behavior) until then. Validation drops
+  // invalid entries silently — never crash the pane over a bad store.
+  let _userPrices = {}          // model → {input, cached, output}
+  let _userProviderPrices = {}  // provider → model → {input, cached, output}
+  function _validateUserEntry(e) {
+    if (!e || typeof e !== 'object') return null
+    const rates = {}
+    for (const k of ['input', 'cached', 'output']) {
+      const v = Number(e[k])
+      if (e[k] !== undefined && (!Number.isFinite(v) || v < 0)) return null
+      rates[k] = e[k] === undefined ? 0 : v
+    }
+    if (e.input === undefined && e.cached === undefined && e.output === undefined) return null
+    return rates
+  }
+  function applyUserOverrides(prices, providerPrices) {
+    const rejected = []
+    const clean = {}
+    let applied = 0
+    if (prices && typeof prices === 'object') {
+      for (const [model, entry] of Object.entries(prices)) {
+        const key = String(model || '').trim()
+        const rates = _validateUserEntry(entry)
+        if (!key || !rates) { if (key) rejected.push(key); continue }
+        clean[key] = rates
+        applied++
+      }
+    }
+    const cleanProvider = {}
+    let appliedProvider = 0
+    if (providerPrices && typeof providerPrices === 'object') {
+      for (const [provider, models] of Object.entries(providerPrices)) {
+        const pKey = String(provider || '').trim().toLowerCase()
+        if (!pKey || !models || typeof models !== 'object') continue
+        const table = {}
+        for (const [model, entry] of Object.entries(models)) {
+          const key = String(model || '').trim()
+          const rates = _validateUserEntry(entry)
+          if (!key || !rates) { if (key) rejected.push(key); continue }
+          table[key] = rates
+          appliedProvider++
+        }
+        if (Object.keys(table).length) cleanProvider[pKey] = table
+      }
+    }
+    _userPrices = clean
+    _userProviderPrices = cleanProvider
+    if (rejected.length) console.warn('[token-stats] user prices: dropped invalid entries:', rejected.join(', '))
+    return { applied, appliedProvider, rejected }
+  }
+
 
   // ── I18N + currency (v5.0.0) ───────────────────────────────────────
   // VERBATIM PORT from the desktop plugin.js (commit 36c84b5): same
@@ -1275,14 +1330,20 @@
   // unpriced (never fabricate a number) or usage is missing.
   // Provider-aware lookup — exact billing_provider match first
   // (PRICES_PROVIDER), then model-only (PRICES).
+  // v1.0.0: user overrides merge OVER the built-ins — same specificity
+  // chain, user layer first at every level.
   function estimateCost(u) {
     if (!u) return null
     const model = String(u.model || '').trim()
     let p = null
     const provider = String(u.billing_provider || '').trim().toLowerCase()
-    if (provider && PRICES_PROVIDER[provider]) {
+    if (provider && _userProviderPrices[provider]) {
+      p = _userProviderPrices[provider][model] || null
+    }
+    if (!p && provider && PRICES_PROVIDER[provider]) {
       p = PRICES_PROVIDER[provider][model] || null
     }
+    if (!p && _userPrices[model]) p = _userPrices[model]
     if (!p) p = PRICES[model] || null
     if (!p) return null
     const input = Number(u.input) || 0
@@ -1499,6 +1560,29 @@
 
   // ── Data hooks ──────────────────────────────────────────────────────
 
+  // v1.0.0: user price overrides — one fetch per pane mount. populated
+  // is a guard so the cost lines keep referencing the ledger state (and
+  // re-render) after the overrides land; ESTIMATE_COST version stays a
+  // synchronous holder read. Legacy/backends without the route: the
+  // catch leaves the holders empty = built-in prices, silently.
+  function useUserPrices() {
+    const [populated, setPopulated] = useState(false)
+    useEffect(() => {
+      let dead = false
+      fetchJSON('/api/plugins/token-stats/prices')
+        .then(j => {
+          if (dead) return
+          if (j && (j.prices || j.providerPrices)) {
+            applyUserOverrides(j.prices, j.providerPrices)
+            setPopulated(true)
+          }
+        })
+        .catch(() => {})
+      return () => { dead = true }
+    }, [])
+    return populated
+  }
+
   // Known-ledger fetch: monotonic per-session totals + per-model rows,
   // same calendar-window params the desktop pane sends. 30 s poll.
   function useLedger(range, reload) {
@@ -1586,6 +1670,11 @@
     _region = region
     const tableRef = useRef(null)
     const setAndSaveColWidths = (w) => { setColWidths(w); saveColWidths(w) }
+
+    // v1.0.0: user price overrides (module holders populated async at
+    // mount — populated flips state so cost lines re-render with the
+    // override prices once they land)
+    const overridesReady = useUserPrices()
 
     const ledger = useLedger(range, reload)
     const ledgerOk = ledger && ledger.ok
