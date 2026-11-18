@@ -2393,7 +2393,25 @@ function TokenPane() {
                           onClick: () => { setRegion(r) },
                           children: sym,
                         }, 'reg-' + r)) }),
-                      t('summaryTotal'),
+                      // v1.0.0 baseline fix: the label gets its own
+                      // inline-block at the SAME box height as the region
+                      // buttons, middle-aligned like them — by construction
+                      // every element in this cell centers on the cell's
+                      // vertical mid, so the mixed inline content can no
+                      // longer shift the label's baseline relative to the
+                      // pure-text value cells (Andi report: "TOTAL sits
+                      // too high" since v5.1.1 put the buttons in this
+                      // cell). Pure inline styles — paints reliably in
+                      // the desktop runtime where arbitrary utilities
+                      // don't.
+                      jsx('span', {
+                        style: {
+                          display: 'inline-block',
+                          verticalAlign: 'middle',
+                          lineHeight: '14px',
+                        },
+                        children: t('summaryTotal'),
+                      }),
                     ] }),
                   jsx('td', { className: 'text-right px-1 tabular-nums font-medium', style: { width: W[1] + '%' }, children: fmt(grandInput) }),
                   jsx('td', {
