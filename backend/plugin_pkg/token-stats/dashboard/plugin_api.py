@@ -25,12 +25,22 @@ import os
 import sqlite3
 
 from fastapi import APIRouter
+from fastapi.responses import JSONResponse
 
 router = APIRouter()
 
 LEDGER_BASE = os.environ.get("LEDGER_BASE", os.path.expanduser("~/token-stats-ledger"))
 STATE_DB = os.environ.get(
     "LEDGER_STATE_DB", os.path.expanduser("~/.hermes/state.db")
+)
+# v1.0.0: user-maintained price overrides. Stored in the PLUGIN dir (not
+# the repo, not the ledger base): survives daemon restarts AND plugin
+# package re-deploys (cp -r only overwrites files the repo ships; this
+# file is never in the repo). Pure config transport — the server stays
+# price-free, all cost math is client-side.
+USER_PRICES_PATH = os.environ.get(
+    "TOKEN_STATS_USER_PRICES",
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "user_prices.json"),
 )
 
 
@@ -363,6 +373,112 @@ async def events(session_id: str, limit: int = 50, profile: str = "default"):
             "ORDER BY id DESC LIMIT ?", (session_id, limit)).fetchall()]}
     finally:
         conn.close()
+
+
+@router.get("/prices")
+async def get_prices():
+    """User-maintained price overrides (see the README "Custom prices").
+
+    Returns {} when no overrides have been stored — the client then runs
+    purely on its built-in tables. The file is read per request so edits
+    (scp, editor) are picked up without a dashboard restart.
+    """
+    import json
+    if not os.path.exists(USER_PRICES_PATH):
+        return {"prices": {}, "providerPrices": {}}
+    try:
+        with open(USER_PRICES_PATH, encoding="utf-8") as fh:
+            data = json.load(fh)
+        if not isinstance(data, dict):
+            return {"prices": {}, "providerPrices": {}}
+        return {
+            "prices": data.get("prices") if isinstance(data.get("prices"), dict) else {},
+            "providerPrices": (data.get("providerPrices")
+                               if isinstance(data.get("providerPrices"), dict) else {}),
+        }
+    except (json.JSONDecodeError, OSError):
+        return {"prices": {}, "providerPrices": {}}
+
+
+def _validate_rates(entry):
+    """Mirror of the client's _validateUserEntry: dict with finite,
+    non-negative numbers; missing rates default to 0; an entry without
+    any rate is invalid (not a free model — explicit 0s for that)."""
+    if not isinstance(entry, dict):
+        return None
+    out = {}
+    for key in ("input", "cached", "output"):
+        if key in entry and entry[key] is not None:
+            try:
+                val = float(entry[key])
+            except (TypeError, ValueError):
+                return None
+            if val != val or val in (float("inf"), float("-inf")) or val < 0:
+                return None
+            out[key] = val
+        else:
+            out[key] = 0.0
+    if not any(key in entry and entry[key] is not None for key in ("input", "cached", "output")):
+        return None
+    return out
+
+
+@router.put("/prices")
+async def put_prices(request: dict):
+    """Store user price overrides. Body schema (all optional):
+
+        {"prices": {"model-id": {"input": x, "cached": y, "output": z}},
+         "providerPrices": {"provider": {"model-id": {...}}}}
+
+    Rates are USD per 1M tokens, >= 0, missing rates default to 0.
+    Invalid entries are DROPPED (collected in `rejected`), the valid ones
+    are stored — a partially bad file must not block the good entries.
+    Semantics identical to the desktop plugin's file-based loader.
+    """
+    import json
+    prices = request.get("prices") if isinstance(request, dict) else None
+    provider_prices = request.get("providerPrices") if isinstance(request, dict) else None
+    clean = {}
+    clean_provider = {}
+    rejected = []
+    if isinstance(prices, dict):
+        for model, entry in prices.items():
+            key = str(model or "").strip()
+            rates = _validate_rates(entry)
+            if not key or rates is None:
+                if key:
+                    rejected.append(key)
+                continue
+            clean[key] = rates
+    if isinstance(provider_prices, dict):
+        for provider, models in provider_prices.items():
+            pkey = str(provider or "").strip().lower()
+            if not pkey or not isinstance(models, dict):
+                continue
+            table = {}
+            for model, entry in models.items():
+                key = str(model or "").strip()
+                rates = _validate_rates(entry)
+                if not key or rates is None:
+                    if key:
+                        rejected.append(f"{pkey}/{key}")
+                    continue
+                table[key] = rates
+            if table:
+                clean_provider[pkey] = table
+    payload = {"prices": clean, "providerPrices": clean_provider}
+    tmp = USER_PRICES_PATH + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump(payload, fh, indent=2)
+        fh.write("\n")
+    os.replace(tmp, USER_PRICES_PATH)
+    return JSONResponse({
+        "ok": True,
+        "applied": len(clean),
+        "appliedProvider": sum(len(t) for t in clean_provider.values()),
+        "rejected": rejected,
+        "stored": payload,
+    })
 
 
 @router.get("/health")

@@ -73,6 +73,10 @@ class BackendEnv:
         fake_state_db(self.state)
         os.environ["LEDGER_BASE"] = self.base
         os.environ["LEDGER_STATE_DB"] = self.state
+        # v1.0.0: isolated user-price store (default would be next to the
+        # deployed plugin package — NOT what a test should touch)
+        self.user_prices = os.path.join(self.tmp, "user_prices.json")
+        os.environ["TOKEN_STATS_USER_PRICES"] = self.user_prices
 
     def seed(self, rows):
         # fresh DB per seed (WAL leftovers of the previous connection
@@ -110,6 +114,7 @@ class BackendEnv:
         shutil.rmtree(self.tmp, ignore_errors=True)
         os.environ.pop("LEDGER_BASE", None)
         os.environ.pop("LEDGER_STATE_DB", None)
+        os.environ.pop("TOKEN_STATS_USER_PRICES", None)
 
 
 class TestPluginApi(unittest.TestCase):
@@ -435,6 +440,78 @@ class TestPluginApi(unittest.TestCase):
         r = self.client.get("/api/plugins/token-stats/health")
         j = r.json()
         assert j["ok"] is True and j["rows"] >= 1 and j["last_poll"] > 0
+
+    # ── /prices (v1.0.0) ────────────────────────────────────────────
+
+    def test_prices_get_empty_without_file(self):
+        r = self.client.get("/api/plugins/token-stats/prices")
+        assert r.status_code == 200
+        assert r.json() == {"prices": {}, "providerPrices": {}}
+
+    def test_prices_put_valid_and_get_roundtrip(self):
+        r = self.client.put("/api/plugins/token-stats/prices", json={
+            "prices": {"my-gateway/model-x": {"input": 0.5, "cached": 0.05, "output": 1.5}},
+            "providerPrices": {"mistral": {"my-alias": {"input": 0.3, "cached": 0.03, "output": 0.9}}},
+        })
+        assert r.status_code == 200, r.text
+        j = r.json()
+        assert j["ok"] is True and j["applied"] == 1 and j["appliedProvider"] == 1
+        assert j["rejected"] == []
+        # roundtrip: GET returns the stored payload
+        g = self.client.get("/api/plugins/token-stats/prices").json()
+        assert g["prices"]["my-gateway/model-x"]["input"] == 0.5
+        assert g["providerPrices"]["mistral"]["my-alias"]["output"] == 0.9
+
+    def test_prices_put_drops_invalid_entries(self):
+        r = self.client.put("/api/plugins/token-stats/prices", json={
+            "prices": {
+                "good-model": {"input": 1, "cached": 0.1, "output": 4},
+                "bad-negative": {"input": -1, "cached": 0, "output": 2},
+                "bad-nan": {"input": "oops", "cached": 0, "output": 2},
+                "": {"input": 1},
+                "empty-entry": {},
+            },
+        })
+        j = r.json()
+        assert j["applied"] == 1, j
+        assert set(j["rejected"]) == {"bad-negative", "bad-nan", "empty-entry"}, j
+        # the good entry survives, invalid ones never reach the store
+        g = self.client.get("/api/plugins/token-stats/prices").json()
+        assert "good-model" in g["prices"]
+        assert "bad-negative" not in g["prices"]
+        assert "bad-nan" not in g["prices"]
+
+    def test_prices_put_missing_rates_default_to_zero(self):
+        r = self.client.put("/api/plugins/token-stats/prices", json={
+            "prices": {"partial-model": {"input": 0.25}}})
+        j = r.json()
+        assert j["applied"] == 1 and j["rejected"] == []
+        g = self.client.get("/api/plugins/token-stats/prices").json()
+        assert g["prices"]["partial-model"] == {"input": 0.25, "cached": 0.0, "output": 0.0}
+
+    def test_prices_provider_keys_normalized_lowercase(self):
+        r = self.client.put("/api/plugins/token-stats/prices", json={
+            "providerPrices": {"Mistral": {"alias-a": {"input": 1}}}})
+        g = self.client.get("/api/plugins/token-stats/prices").json()
+        assert "mistral" in g["providerPrices"]
+        assert "Mistral" not in g["providerPrices"]
+
+    def test_prices_overwrite_existing_store(self):
+        self.client.put("/api/plugins/token-stats/prices", json={
+            "prices": {"model-a": {"input": 1}}})
+        r = self.client.put("/api/plugins/token-stats/prices", json={
+            "prices": {"model-b": {"input": 2}}})
+        g = self.client.get("/api/plugins/token-stats/prices").json()
+        # PUT replaces the whole store (documented semantics)
+        assert "model-a" not in g["prices"]
+        assert g["prices"]["model-b"]["input"] == 2
+
+    def test_prices_get_survives_corrupt_json(self):
+        with open(self.env.user_prices, "w") as fh:
+            fh.write("{ not json")
+        r = self.client.get("/api/plugins/token-stats/prices")
+        assert r.status_code == 200
+        assert r.json() == {"prices": {}, "providerPrices": {}}
 
 
 if __name__ == "__main__":
