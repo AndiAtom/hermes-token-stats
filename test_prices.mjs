@@ -32,9 +32,9 @@ let section = src.slice(start, end)
 
 // The section references PRICES_PROVIDER which is defined inside — all
 // self-contained. estimateCost is a function declaration → export via appendix.
-const exportsShim = section + '\nreturn { estimateCost, PRICES, PRICES_PROVIDER, PRICES_OPENROUTER, EU_FACTOR, regionFactor, setTestRegion: (r) => { _region = r } }\n'
+const exportsShim = section + '\nreturn { estimateCost, PRICES, PRICES_PROVIDER, PRICES_OPENROUTER, EU_FACTOR, regionFactor, setTestRegion: (r) => { _region = r }, applyUserOverrides, setTestUserOverrides: (m, p) => { _userPrices = m || {}; _userProviderPrices = p || {} } }\n'
 const factory = new Function(exportsShim)
-const { estimateCost, PRICES, PRICES_OPENROUTER, EU_FACTOR, regionFactor, setTestRegion } = factory()
+const { estimateCost, PRICES, PRICES_OPENROUTER, EU_FACTOR, regionFactor, setTestRegion, applyUserOverrides, setTestUserOverrides } = factory()
 
 // ── provider override beats model-only ─────────────────────────────
 
@@ -202,4 +202,110 @@ test('nous provider prices the historical z-ai/glm-5.3 rows', () => {
   const c = estimateCost({ model: 'z-ai/glm-5.3', billing_provider: 'nous', input: 849_238, cache_read: 89_271_872, output: 227_936 })
   const expected = (849_238 * 1.4 + 89_271_872 * 0.14 + 227_936 * 4.4) / 1_000_000
   assert.ok(Math.abs(c - expected) < 0.001)
+})
+
+// ── user price overrides (v1.0.0) ──────────────────────────────────
+// applyUserOverrides validates + normalizes a user-maintained price file
+// into the _userPrices/_userProviderPrices holders; estimateCost consults
+// them BEFORE the built-in tables (provider-scoped before model-only,
+// user before built-in at every level). Empty overrides = built-in
+// behavior, byte-identical.
+
+test('empty overrides = built-in behavior (regression)', () => {
+  setTestUserOverrides()
+  const c = estimateCost({ model: 'zai-glm-latest', input: 1_000_000, cache_read: 0, output: 0 })
+  assert.equal(c, 1.4)
+  setTestUserOverrides({}, {})
+  const c2 = estimateCost({ model: 'zai-glm-latest', input: 1_000_000, cache_read: 0, output: 0 })
+  assert.equal(c2, 1.4)
+})
+
+test('applyUserOverrides validates entries and returns counts', () => {
+  const res = applyUserOverrides(
+    {
+      'my-custom-model': { input: 0.5, cached: 0.05, output: 1.5 },
+      'bad-negative': { input: -1, cached: 0, output: 2 },
+      'bad-nan': { input: 'oops', cached: 0, output: 2 },
+      'bad-missing-rates': {},
+    },
+    {
+      mistral: {
+        'my-internal-alias': { input: 0.3, cached: 0.03, output: 0.9 },
+      },
+    },
+  )
+  assert.equal(res.applied, 1, 'model-only: one valid entry applied')
+  assert.equal(res.appliedProvider, 1, 'provider-scoped: one valid entry applied')
+  assert.equal(res.rejected.length, 3, `rejected: ${res.rejected.join(',')}`)
+})
+
+test('missing rates default to 0, not rejected', () => {
+  const res = applyUserOverrides({ 'partial-model': { input: 0.25 } }, {})
+  assert.equal(res.applied, 1)
+  assert.equal(res.rejected.length, 0)
+  const c = estimateCost({ model: 'partial-model', input: 1_000_000, cache_read: 1_000_000, output: 1_000_000 })
+  assert.ok(Math.abs(c - (0.25 + 0 + 0)) < 1e-9, `got ${c}`) // cached/out = 0 rates
+})
+
+test('model-only override beats model-only built-in', () => {
+  setTestUserOverrides({ 'zai-glm-latest': { input: 9.9, cached: 0.99, output: 9.9 } }, {})
+  try {
+    const c = estimateCost({ model: 'zai-glm-latest', input: 1_000_000, cache_read: 0, output: 0 })
+    assert.equal(c, 9.9)
+  } finally {
+    setTestUserOverrides()
+  }
+})
+
+test('model-only override prices a previously unpriced model', () => {
+  setTestUserOverrides({ 'my-gateway/model-x': { input: 0.5, cached: 0.05, output: 1.5 } }, {})
+  try {
+    const c = estimateCost({ model: 'my-gateway/model-x', input: 2_000_000, cache_read: 0, output: 0 })
+    assert.equal(c, 1)
+  } finally {
+    setTestUserOverrides()
+  }
+})
+
+test('provider-scoped override beats provider built-in AND model-only built-in', () => {
+  setTestUserOverrides(
+    { 'z-ai/glm-5.3': { input: 8.8, cached: 0.88, output: 8.8 } },
+    { nous: { 'z-ai/glm-5.3': { input: 7.7, cached: 0.77, output: 7.7 } } },
+  )
+  try {
+    const viaNous = estimateCost({ model: 'z-ai/glm-5.3', billing_provider: 'nous', input: 1_000_000, cache_read: 0, output: 0 })
+    assert.equal(viaNous, 7.7, 'provider user override wins')
+    const modelOnly = estimateCost({ model: 'z-ai/glm-5.3', input: 1_000_000, cache_read: 0, output: 0 })
+    assert.equal(modelOnly, 8.8, 'model-only user override beats built-in')
+  } finally {
+    setTestUserOverrides()
+  }
+})
+
+test('model-only user override does NOT beat provider built-in', () => {
+  setTestUserOverrides({ 'z-ai/glm-5.3': { input: 8.8, cached: 0.88, output: 8.8 } }, {})
+  try {
+    const viaNous = estimateCost({ model: 'z-ai/glm-5.3', billing_provider: 'nous', input: 1_000_000, cache_read: 0, output: 0 })
+    assert.equal(viaNous, 1.4, 'provider built-in (OR table) beats model-only user override — specific beats general')
+  } finally {
+    setTestUserOverrides()
+  }
+})
+
+test('EU region factor applies to user override prices', () => {
+  setTestUserOverrides({ 'my-gateway/model-x': { input: 1, cached: 0.1, output: 4 } }, {})
+  setTestRegion('eu')
+  try {
+    const c = estimateCost({ model: 'my-gateway/model-x', input: 1_000_000, cache_read: 0, output: 0 })
+    assert.ok(Math.abs(c - (1 * EU_FACTOR)) < 1e-9, `got ${c}`)
+  } finally {
+    setTestRegion('global')
+    setTestUserOverrides()
+  }
+})
+
+test('unpriced stays null and free stays 0 when no override exists', () => {
+  setTestUserOverrides()
+  assert.equal(estimateCost({ model: 'no-such-model-anywhere', input: 1_000_000, cache_read: 0, output: 0 }), null)
+  assert.equal(estimateCost({ model: 'stepfun/step-3.7-flash:free', input: 500_000, cache_read: 100_000, output: 50_000 }), 0)
 })

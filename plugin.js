@@ -745,6 +745,70 @@ const EU_FACTOR = 1.1
 let _region = 'global'
 function regionFactor() { return _region === 'eu' ? EU_FACTOR : 1 }
 
+// ── User price overrides (v1.0.0) ────────────────────────────────────
+// Users can maintain their own prices (e.g. for models the built-in
+// tables don't cover — own gateways, unlisted models). The user file
+// merges OVER the built-in tables: user keys override built-in keys,
+// new keys add. Lookup precedence, most specific first:
+//   provider-scoped user → provider-scoped built-in →
+//   model-only user      → model-only built-in
+// The holders stay empty until an async load (file fetch / backend
+// route) fills them — estimateCost is synchronous and reads only the
+// holders (same pattern as _region). applyUserOverrides validates and
+// normalizes: rates must be finite numbers ≥ 0, missing rates default
+// to 0, invalid entries are dropped silently (reported in the return
+// value for console warnings — never crash the plugin over a bad file).
+let _userPrices = {}          // model → {input, cached, output}
+let _userProviderPrices = {}  // provider → model → {input, cached, output}
+function _validateUserEntry(e) {
+  if (!e || typeof e !== 'object') return null
+  const rates = {}
+  for (const k of ['input', 'cached', 'output']) {
+    const v = Number(e[k])
+    if (e[k] !== undefined && (!Number.isFinite(v) || v < 0)) return null
+    rates[k] = e[k] === undefined ? 0 : v
+  }
+  // An entry with all rates undefined ({} or no numbers at all) carries no
+  // information — treat as invalid, not as a free model (use explicit 0s).
+  if (e.input === undefined && e.cached === undefined && e.output === undefined) return null
+  return rates
+}
+function applyUserOverrides(prices, providerPrices) {
+  const rejected = []
+  const clean = {}
+  let applied = 0
+  if (prices && typeof prices === 'object') {
+    for (const [model, entry] of Object.entries(prices)) {
+      const key = String(model || '').trim()
+      const rates = _validateUserEntry(entry)
+      if (!key || !rates) { if (key) rejected.push(key); continue }
+      clean[key] = rates
+      applied++
+    }
+  }
+  const cleanProvider = {}
+  let appliedProvider = 0
+  if (providerPrices && typeof providerPrices === 'object') {
+    for (const [provider, models] of Object.entries(providerPrices)) {
+      const pKey = String(provider || '').trim().toLowerCase()
+      if (!pKey || !models || typeof models !== 'object') continue
+      const table = {}
+      for (const [model, entry] of Object.entries(models)) {
+        const key = String(model || '').trim()
+        const rates = _validateUserEntry(entry)
+        if (!key || !rates) { if (key) rejected.push(`${pKey}/${key}`); continue }
+        table[key] = rates
+        appliedProvider++
+      }
+      if (Object.keys(table).length) cleanProvider[pKey] = table
+    }
+  }
+  _userPrices = clean
+  _userProviderPrices = cleanProvider
+  if (rejected.length) console.warn('[token-stats] user prices: dropped invalid entries:', rejected.join(', '))
+  return { applied, appliedProvider, rejected }
+}
+
 // Estimate session cost from usage fields. Returns null when the model is
 // unpriced (never fabricate a number) or usage is missing.
 // v4.5.0: provider-aware lookup — exact billing_provider match first
@@ -753,14 +817,22 @@ function regionFactor() { return _region === 'eu' ? EU_FACTOR : 1 }
 // v5.1.0: region-aware — the EU-endpoint premium (EU_FACTOR) applies to
 // the resolved price BEFORE usage is multiplied in. Unpriced rows stay
 // null (factor never fabricates a price), 0.00 stays 0.00.
+// v1.0.0: user overrides (prices.json / backend /prices) merge OVER the
+// built-ins — same specificity chain, user layer consulted first at
+// every level: provider-user → provider-built-in → model-user →
+// model-built-in. Region factor applies to overrides like to built-ins.
 function estimateCost(u) {
   if (!u) return null
   const model = String(u.model || '').trim()
   let p = null
   const provider = String(u.billing_provider || '').trim().toLowerCase()
-  if (provider && PRICES_PROVIDER[provider]) {
+  if (provider && _userProviderPrices[provider]) {
+    p = _userProviderPrices[provider][model] || null
+  }
+  if (!p && provider && PRICES_PROVIDER[provider]) {
     p = PRICES_PROVIDER[provider][model] || null
   }
+  if (!p && _userPrices[model]) p = _userPrices[model]
   if (!p) p = PRICES[model] || null
   if (!p) return null
   const input = Number(u.input) || 0
@@ -2891,6 +2963,26 @@ export default {
     // back to the usage.history RPC when this is unset or errors (OAuth
     // remotes resolve ctx.rest to a no-op).
     restApi = (path, opts) => ctx.rest(path, opts)
+
+    // v1.0.0: user price overrides — try prices.json NEXT TO this plugin
+    // file first (desktop layout: ~/.hermes/desktop-plugins/token-stats/),
+    // then the backend /prices route (web-oriented, but harmless on the
+    // desktop when the backend is installed). Both loads are async and
+    // fire-and-forget: overrides stay empty (built-in prices) until they
+    // land; every render after the load recomputes retroactively since
+    // estimateCost reads the holders synchronously. Soft model: a missing
+    // file (404) is the NORMAL case — no warning, no error.
+    try {
+      fetch(new URL('prices.json', import.meta.url).href)
+        .then(r => (r.ok ? r.json() : null))
+        .then(j => { if (j) applyUserOverrides(j.prices, j.providerPrices) })
+        .catch(() => {})
+    } catch (e) { /* import.meta.url unsupported in this host — skip silently */ }
+    if (restApi) {
+      restApi('/prices')
+        .then(j => { if (j && (j.prices || j.providerPrices)) applyUserOverrides(j.prices, j.providerPrices) })
+        .catch(() => {})
+    }
 
     // Load persisted chip visibility (sync seed before first render)
     const saved = ctx.storage.get('chipShow', null)
