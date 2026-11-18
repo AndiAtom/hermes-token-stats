@@ -1,0 +1,8 @@
+name: token-stats
+version: 1.0.0
+description: >
+    Known-Ledger backend for the token-stats desktop plugin. Serves monotonic
+    (compression-safe) token counters from a per-profile ledger DB that is
+    maintained by the token-stats-ledger systemd daemon polling the Hermes
+    state.db read-only. Client access via ctx.rest(). Mounts under the
+    desktop plugin's own ID 'token-stats' (ctx.rest is namespace-locked).

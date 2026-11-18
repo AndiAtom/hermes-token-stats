@@ -1,2 +1,6 @@
 # Interne AI-Wissensdatei (Konvention /root/Private/AI-HELPER.md) — NICHT committen
 AI-HELPER.md
+
+# Python
+__pycache__/
+*.pyc

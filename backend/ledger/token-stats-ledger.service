@@ -1,0 +1,20 @@
+[Unit]
+Description=token-stats known-ledger daemon (polls Hermes state.db read-only)
+After=network.target
+
+[Service]
+Type=simple
+# Run from a clone of this repo — adjust BOTH paths to where YOU cloned it
+# (systemd does not expand ~ or $HOME; Environment= supports $VAR refs only
+# for variables systemd itself knows, so the repo path must be literal).
+# If you install as root from /root/Private/hermes-usage-history-rpc, the
+# defaults below work as-is.
+ExecStart=/usr/local/lib/hermes-agent/venv/bin/python3 -m ledger.daemon
+WorkingDirectory=/root/Private/hermes-usage-history-rpc
+Environment=PYTHONPATH=/root/Private/hermes-usage-history-rpc
+Restart=on-failure
+RestartSec=10
+# vom Hermes-Gateway-Prozess abgekoppelt, überlebt Hermes-Updates
+
+[Install]
+WantedBy=multi-user.target

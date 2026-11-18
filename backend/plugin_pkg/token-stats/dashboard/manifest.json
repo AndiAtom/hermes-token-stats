@@ -1,0 +1,9 @@
+{
+  "name": "token-stats",
+  "api": "plugin_api.py",
+  "entry": "web-entry.js",
+  "label": "Token Stats",
+  "description": "Per-session/per-model token + cost stats over the known ledger (web companion to the desktop plugin).",
+  "icon": "Puzzle",
+  "version": "5.2.4-web.1"
+}
