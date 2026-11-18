@@ -97,7 +97,9 @@ backend support fall back to live-only). Since v4.4:
   DB resets (anomaly events), `●` live-only sessions, `≈` on totals =
   unpriced rows excluded, `—` = missing values
 
-![Pane example with persistent history, aggregate summary and focused-session highlight](docs/pane-example.png)
+![Live screenshot of the pane (all-time window): aggregate summary with 🌐/EU region toggle, cache-hit bar, daily histogram, collapsible day groups, model/subagent/aux breakdowns](docs/pane-example.png)
+
+*A live installation (session titles redacted). The footer counts aggregates over the active window — 717 sessions, 18 models, 18 subagents, 5 aux tasks in the all-time view above.*
 
 *Example rendering with sample data (Nord theme): language + currency
 toggles (EN / € active), calendar range presets*
@@ -113,11 +115,13 @@ open the per-model, per-subagent and per-aux-task breakdown lists
 model has no price, `≈` when unpriced rows were excluded from the row's
 estimate).*
 
-> The screenshot is generated from `docs/pane-mockup.html` — a standalone
-> 1:1 mockup of the pane's render logic with sample data (the live pane
-> cannot be screenshotted headlessly; the desktop app ships no CDP port).
-> Regenerate: render the HTML in a browser at 380px width, device pixel
-> ratio 2, and capture the `#pane` element.
+A pixel-perfect reference render with sample data lives at
+[docs/pane-mockup-v1.0.0.png](docs/pane-mockup-v1.0.0.png) — generated from
+`docs/pane-mockup.html`, a standalone 1:1 mockup of the pane's render logic
+(sample data, Nord theme): language + currency toggles, region toggle in the
+summary box, cache-hit bar, histogram, day groups, breakdown lists with
+relative size bars. Regenerate after layout changes: render the HTML in a
+browser at 380px width, device pixel ratio 2, capture the `#pane` element.
 
 ## Data availability — mid-month installs
 
