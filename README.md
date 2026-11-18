@@ -472,11 +472,11 @@ pane* above); v1.1 turns that into first-class support:
 - **hermes-proxy integration:** `hermes proxy` (local OpenAI-compatible
   forwarder to OAuth providers — external apps point at it with any bearer
   token) needs proper coverage in the stats. Open questions to resolve at
-  build time (Andi 18.11.2026): how do proxied requests land in state.db
-  (source? billing_provider? separate profile?) — verify what the proxy
-  actually writes before designing anything. Goal: usage that runs
-  through the proxy must be visible in the pane (and priced correctly via
-  the custom-prices layer, incl. provider-scoped overrides if the proxy
+  build time: how do proxied requests land in state.db (source?
+  billing_provider? separate profile?) — verify what the proxy actually
+  writes before designing anything. Goal: usage that runs through the
+  proxy must be visible in the pane (and priced correctly via the
+  custom-prices layer, incl. provider-scoped overrides if the proxy
   reports its own provider string).
 - **LiteLLM consumer tracking** (previous plan for this slot, scope
   flexible): optional integration with a self-hosted
