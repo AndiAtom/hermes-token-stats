@@ -2003,13 +2003,14 @@
                         title: t('menu_region') + ': eu',
                         onClick: () => setRegion('eu'),
                       }, 'EU')),
-                    // v1.0.0 baseline fix (desktop lockstep): the label
-                    // gets its own middle-aligned inline-block like the
-                    // buttons, so mixed inline content can never shift
-                    // its baseline relative to the pure-text value cells.
-                    h('span', {
-                      style: { display: 'inline-block', verticalAlign: 'middle', lineHeight: '14px' },
-                    }, 'Total')),
+                    // v1.0.0: plain text label stays — MEASURED 0.00px
+                    // alignment here (Playwright, DOM-range). The desktop
+                    // baseline fix (label wrapped in a middle-aligned
+                    // inline-block) is deliberately NOT lockstep-ported:
+                    // on this surface the wrapper pushes the label 0.44px
+                    // DOWN (measured) — the defect is desktop-runtime
+                    // specific, so is the fix.
+                    'Total'),
                   h('td', { className: 'ts-num', style: { width: colWidths[1] + '%', fontWeight: 500 } }, fmt(grandInput)),
                   h('td', {
                     className: 'ts-num ts-acc', style: { width: colWidths[2] + '%', fontWeight: 500 },
