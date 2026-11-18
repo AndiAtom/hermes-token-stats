@@ -911,6 +911,7 @@
       auxTasks: (n) => n === 1 ? 'Aux-Task' : 'Aux-Tasks',
       modelsHeader: 'Models',
       subagentsHeader: 'Subagents',
+      subagentParentTip: 'Spawned by parent session:',
       auxHeader: 'Aux-Tasks',
       modelsTipOpen: 'Expand model list (over the active window)',
       modelsTipClose: 'Collapse model list',
@@ -1005,6 +1006,7 @@
       auxTasks: (n) => n === 1 ? 'Aux-Task' : 'Aux-Tasks',
       modelsHeader: 'Modelle',
       subagentsHeader: 'Subagenten',
+      subagentParentTip: 'Gestartet von Parent-Session:',
       auxHeader: 'Aux-Tasks',
       modelsTipOpen: 'Modell-Liste aufklappen (auf- und absteigend über das aktive Fenster)',
       modelsTipClose: 'Modell-Liste zuklappen',
@@ -1093,6 +1095,7 @@
       auxTasks: (n) => n === 1 ? 'Aux-Task' : 'Aux-Tasks',
       modelsHeader: 'Modèles',
       subagentsHeader: 'Subagents',
+      subagentParentTip: 'Lancé par la session parente :',
       auxHeader: 'Aux-Tasks',
       modelsTipOpen: 'Déplier la liste des modèles (sur la fenêtre active)',
       modelsTipClose: 'Replier la liste des modèles',
@@ -1181,6 +1184,7 @@
       auxTasks: (n) => n === 1 ? 'Aux-Task' : 'Aux-Tasks',
       modelsHeader: 'Modellen',
       subagentsHeader: 'Subagents',
+      subagentParentTip: 'Gestart door bovenliggende sessie:',
       auxHeader: 'Aux-Tasks',
       modelsTipOpen: 'Modellenlijst uitklappen (over het actieve venster)',
       modelsTipClose: 'Modellenlijst inklappen',
@@ -1269,6 +1273,7 @@
       auxTasks: (n) => n === 1 ? 'Aux-Task' : 'Aux-Tasks',
       modelsHeader: 'Modelli',
       subagentsHeader: 'Subagents',
+      subagentParentTip: 'Avviato dalla sessione padre:',
       auxHeader: 'Aux-Tasks',
       modelsTipOpen: 'Espandi lista modelli (sulla finestra attiva)',
       modelsTipClose: 'Comprimi lista modelli',
@@ -2257,12 +2262,15 @@
                 return h('div', {
                   className: 'ts-brkrow',
                   key: sr.id,
-                  title: `${sr.title}\n${sr.id}${sr.parent ? `\nParent: ${sr.parent}` : ''}\nIn: ${fmtFull(sr.in)} · ⚡: ${fmtFull(sr.cached)} · Out: ${fmtFull(sr.out)}\n${t('grandTotalWord')} ${fmtFull(total)} ${t('tokensWord')} · Calls: ${fmtFull(sr.calls)}`,
+                  title: `${sr.title}\n${sr.id}\nIn: ${fmtFull(sr.in)} · ⚡: ${fmtFull(sr.cached)} · Out: ${fmtFull(sr.out)}\n${t('grandTotalWord')} ${fmtFull(total)} ${t('tokensWord')} · Calls: ${fmtFull(sr.calls)}`,
                 },
                   bar,
                   h('div', { className: 'ts-brkname' },
                     h('span', { className: 'nm' }, sr.title),
-                    sr.parent ? h('span', { className: 'mt' }, '↳ Parent') : null),
+                    // v1.0.0 lockstep: badge becomes the hover target for
+                    // the parent id (row tooltip dropped the hardcoded
+                    // English "Parent:" line)
+                    sr.parent ? h('span', { className: 'mt', title: `${t('subagentParentTip')}\n${sr.parent}` }, '↳ Parent') : null),
                   h('div', { className: 'ts-brknum' },
                     h('span', { title: `${t('totalTokens')}: ${fmtFull(total)}` }, fmt(total)),
                     h('span', {

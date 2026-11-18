@@ -954,6 +954,7 @@ const I18N = {
     auxTasks: (n) => n === 1 ? 'Aux-Task' : 'Aux-Tasks',
     modelsHeader: 'Models',
     subagentsHeader: 'Subagents',
+    subagentParentTip: 'Spawned by parent session:',
     auxHeader: 'Aux-Tasks',
     modelsTipOpen: 'Expand model list (over the active window)',
     modelsTipClose: 'Collapse model list',
@@ -1048,6 +1049,7 @@ const I18N = {
     auxTasks: (n) => n === 1 ? 'Aux-Task' : 'Aux-Tasks',
     modelsHeader: 'Modelle',
     subagentsHeader: 'Subagenten',
+    subagentParentTip: 'Gestartet von Parent-Session:',
     auxHeader: 'Aux-Tasks',
     modelsTipOpen: 'Modell-Liste aufklappen (auf- und absteigend über das aktive Fenster)',
     modelsTipClose: 'Modell-Liste zuklappen',
@@ -1136,6 +1138,7 @@ const I18N = {
     auxTasks: (n) => n === 1 ? 'Aux-Task' : 'Aux-Tasks',
     modelsHeader: 'Modèles',
     subagentsHeader: 'Subagents',
+    subagentParentTip: 'Lancé par la session parente :',
     auxHeader: 'Aux-Tasks',
     modelsTipOpen: 'Déplier la liste des modèles (sur la fenêtre active)',
     modelsTipClose: 'Replier la liste des modèles',
@@ -1224,6 +1227,7 @@ const I18N = {
     auxTasks: (n) => n === 1 ? 'Aux-Task' : 'Aux-Tasks',
     modelsHeader: 'Modellen',
     subagentsHeader: 'Subagents',
+    subagentParentTip: 'Gestart door bovenliggende sessie:',
     auxHeader: 'Aux-Tasks',
     modelsTipOpen: 'Modellenlijst uitklappen (over het actieve venster)',
     modelsTipClose: 'Modellenlijst inklappen',
@@ -1312,6 +1316,7 @@ const I18N = {
     auxTasks: (n) => n === 1 ? 'Aux-Task' : 'Aux-Tasks',
     modelsHeader: 'Modelli',
     subagentsHeader: 'Subagents',
+    subagentParentTip: 'Avviato dalla sessione padre:',
     auxHeader: 'Aux-Tasks',
     modelsTipOpen: 'Espandi lista modelli (sulla finestra attiva)',
     modelsTipClose: 'Comprimi lista modelli',
@@ -2837,12 +2842,22 @@ function TokenPane() {
                     : null
                   return jsxs('div', {
                     className: 'relative flex items-center justify-between gap-2 px-2 py-1 overflow-hidden',
-                    title: `${sr.title}\n${sr.id}${sr.parent ? `\nParent: ${sr.parent}` : ''}\nIn: ${fmtFull(sr.in)} · ⚡: ${fmtFull(sr.cached)} · Out: ${fmtFull(sr.out)}\n${t('grandTotalWord')} ${fmtFull(total)} ${t('tokensWord')} · Calls: ${fmtFull(sr.calls)}`,
+                    title: `${sr.title}\n${sr.id}\nIn: ${fmtFull(sr.in)} · ⚡: ${fmtFull(sr.cached)} · Out: ${fmtFull(sr.out)}\n${t('grandTotalWord')} ${fmtFull(total)} ${t('tokensWord')} · Calls: ${fmtFull(sr.calls)}`,
                     children: [
                       bar,
                       jsxs('div', { className: 'relative z-10 flex items-baseline gap-1.5 min-w-0', children: [
                         jsx('span', { className: 'truncate font-medium', children: sr.title }),
-                        sr.parent ? jsx('span', { className: 'text-[0.625rem] text-(--ui-text-quaternary) shrink-0', children: '↳ Parent' }) : null,
+                        sr.parent ? jsx('span', {
+                          className: 'text-[0.625rem] text-(--ui-text-quaternary) shrink-0 cursor-help',
+                          // v1.0.0: the badge is the hover target for the
+                          // parent id — before, the row tooltip carried a
+                          // hardcoded English "Parent: <id>" line while the
+                          // badge itself had no tooltip at all (review
+                          // finding 18.11.2026: "Parent" Schriftzug ohne
+                          // erkennbare Funktion).
+                          title: `${t('subagentParentTip')}\n${sr.parent}`,
+                          children: '↳ Parent',
+                        }) : null,
                       ]}),
                       jsxs('div', { className: 'relative z-10 flex items-center gap-2 shrink-0 tabular-nums text-(--ui-text-secondary)', children: [
                         jsx('span', { title: `${t('totalTokens')}: ${fmtFull(total)}`, children: fmt(total) }),
