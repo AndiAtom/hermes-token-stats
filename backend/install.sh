@@ -558,6 +558,6 @@ cat <<EOF
 
 Done. What to check next:
   • Web dashboard:  open http://<host>:9119/token-stats  (hard-reload if open) — Token Stats tab in the sidebar
-  • Desktop plugin: reload via ⌘K → "Reload desktop plugins" (companion repo AndiAtom/hermes-token-stats)
+  • Desktop plugin: the installer just deployed it — reload in the app via ⌘K → "Reload desktop plugins" (client-only installs: re-run with --client-only)
   • Daemon:         $STAT_CMD
 EOF
