@@ -78,6 +78,7 @@ Data sources: `sessions` (lifetime totals per session) + `session_model_usage`
 | `/api/plugins/token-stats/ledger` | `days`, `since` (inclusive), `until` (EXCLUSIVE upper bound, calendar windows), `limit`, `session_id`, `models`, `totals` (v0.7.0: `1` = full-window aggregation, limit-independent), `profile` | `sessions[]` + `model_usage[]` — shape-compatible with `usage.history` (known counters + state.db metadata, window/filter on real activity); with `totals=1` additionally `totals` `{sessions, input_tokens, cache_read_tokens, output_tokens, api_call_count, by_model[], by_task[] (aux only), by_day[]}` aggregated over the FULL window before the limit cut |
 | `/api/plugins/token-stats/events` | `session_id`, `limit`, `profile` | anomaly history (decrease/removed/reappeared) |
 | `/api/plugins/token-stats/profiles` | — | available ledger profiles |
+| `/api/plugins/token-stats/prices` | `PUT` body: `{"prices": {"model": {input, cached, output}}, "providerPrices": {"provider": {"model": {...}}}}` — rates USD per 1M, ≥ 0, missing rates = 0; invalid entries dropped into `rejected[]` | v1.0.0 GET: `{prices, providerPrices}` (empty objects when unset). PUT: `{ok, applied, appliedProvider, rejected, stored}`. Store: `user_prices.json` next to the deployed package, read per request (editor/scp edits apply without restart) |
 | `/api/plugins/token-stats/health` | `profile` | daemon liveness via heartbeat (`source: heartbeat`), rows, age; `last_poll` fallback for pre-v0.5.0 ledger DBs |
 
 The RPCs (`usage.history`/`usage.totals`) were removed in v1.0.0 — the

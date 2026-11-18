@@ -240,6 +240,55 @@ with a recorded DB-reset anomaly.
 
 ## Pricing table
 
+### Custom prices (v1.0.0)
+
+Models missing from the built-in tables (own gateway, unlisted model)
+don't have to stay `—`. Two ways to maintain your own prices — both
+merge OVER the built-ins (your keys win, unknown keys add; the built-in
+tables stay as fallback and stay curated here):
+
+**1. `prices.json` next to the plugin** (desktop):
+
+```json
+{
+  "prices": {
+    "my-gateway/model-x": { "input": 0.5, "cached": 0.05, "output": 1.5 }
+  },
+  "providerPrices": {
+    "mistral": {
+      "my-internal-alias": { "input": 0.3, "cached": 0.03, "output": 0.9 }
+    }
+  }
+}
+```
+
+Place it at `~/.hermes/desktop-plugins/token-stats/prices.json`. Rates
+are USD per 1M tokens; missing rates default to 0.
+
+**2. Backend route** (works for both surfaces):
+
+```bash
+curl -X PUT http://<dashboard-host>:9119/api/plugins/token-stats/prices \
+  -H 'Content-Type: application/json' \
+  -d '{"prices": {"my-gateway/model-x": {"input": 0.5, "cached": 0.05, "output": 1.5}}}'
+```
+
+Stored next to the deployed backend; `GET` on the same route reads it
+back. The web pane picks it up on reload, the desktop plugin on plugin
+reload.
+
+Lookup precedence, most specific first: provider-scoped user →
+provider-scoped built-in → model-only user → model-only built-in. The EU
+region factor applies to your overrides like to built-ins. Invalid
+entries (negative, non-numeric) are dropped silently — check the
+browser/devtools console for the `[token-stats]` warning listing them.
+
+> Recommendation: store the **regular list price**, not a temporary sale
+> price — the purpose is a pay-as-you-go equivalent over time. Missing a
+> built-in price that SHOULD be in the curated tables? Open an issue with
+> the *Provider pricing request* template — user overrides are yours,
+> the built-ins are everyone's.
+
 `cost_usd` never arrives from the gateway for `custom:` providers
 (`billing_mode=unknown`, `estimated_cost_usd` stays 0.0), so the plugin prices
 locally. **v4.5.0: provider-aware three-level lookup** — the estimate depends
