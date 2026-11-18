@@ -1419,6 +1419,12 @@ const RANGE_PRESETS = [
     tip: 'range_tip_all' },
 ]
 const historyRange = atom('month')
+// v1.0.0: bumps when user price overrides land (async load) — HistoryQuery
+// subscribes to it as a query key so the pane re-fetches/re-renders with
+// the override prices. Without this the first render (pre-load) kept
+// showing built-in costs forever (review finding 18.11.2026: 0,10 € row
+// never updated after the override arrived).
+const pricesVersion = atom(0)
 
 // Compute the calendar window for a preset in LOCAL time.
 // Returns { since, until, rollingDays } — since/until epoch seconds,
@@ -1881,8 +1887,13 @@ function HistoryQuery(range) {
   // ledger backend; the legacy usage.history fallback only understands
   // rolling `days`, so it gets the preset's rollingDays approximation.
   const win = windowFor(range)
+  // v1.0.0: pricesVersion in the queryKey — when user price overrides
+  // land (async backend/file load), the bump re-runs this query and the
+  // pane re-renders with override costs instead of keeping the
+  // pre-load built-in snapshot (review finding 18.11.2026).
+  const pricesV = useValue(pricesVersion)
   return useQuery({
-    queryKey: [ID, 'knownHistory', win.since, win.until],
+    queryKey: [ID, 'knownHistory', win.since, win.until, pricesV],
     queryFn: async () => {
       // 1st choice: known-ledger backend (ctx.rest namespace).
       // v5.2.0: totals=1 — the backend aggregates the FULL window
@@ -2993,12 +3004,21 @@ export default {
     try {
       fetch(new URL('prices.json', import.meta.url).href)
         .then(r => (r.ok ? r.json() : null))
-        .then(j => { if (j) applyUserOverrides(j.prices, j.providerPrices) })
+        .then(j => {
+          if (!j) return
+          const res = applyUserOverrides(j.prices, j.providerPrices)
+          // re-render: bump the query key so the pane recomputes costs
+          if (res && (res.applied || res.appliedProvider)) pricesVersion.set(pricesVersion.get() + 1)
+        })
         .catch(() => {})
     } catch (e) { /* import.meta.url unsupported in this host — skip silently */ }
     if (restApi) {
       restApi('/prices')
-        .then(j => { if (j && (j.prices || j.providerPrices)) applyUserOverrides(j.prices, j.providerPrices) })
+        .then(j => {
+          if (!j || !(j.prices || j.providerPrices)) return
+          const res = applyUserOverrides(j.prices, j.providerPrices)
+          if (res && (res.applied || res.appliedProvider)) pricesVersion.set(pricesVersion.get() + 1)
+        })
         .catch(() => {})
     }
 
