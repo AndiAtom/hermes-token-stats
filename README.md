@@ -97,9 +97,13 @@ backend support fall back to live-only). Since v4.4:
   DB resets (anomaly events), `●` live-only sessions, `≈` on totals =
   unpriced rows excluded, `—` = missing values
 
-![Live screenshot of the pane (all-time window): aggregate summary with 🌐/EU region toggle, cache-hit bar, daily histogram, collapsible day groups, model/subagent/aux breakdowns](docs/pane-example.png)
+<a href="docs/pane-example.png" target="_blank" rel="noopener">
+  <img src="docs/pane-example.png" width="300" alt="Live screenshot of the pane (all-time window): aggregate summary with 🌐/EU region toggle, cache-hit bar, daily histogram, collapsible day groups, model/subagent/aux breakdowns — click to enlarge" />
+</a>
 
-*A live installation (session titles redacted). The footer counts aggregates over the active window — 717 sessions, 18 models, 18 subagents, 5 aux tasks in the all-time view above.*
+*Live installation, all-time window (session titles redacted) — click the
+thumbnail to view it full-size. The footer counts aggregate over the active
+window: 717 sessions, 18 models, 18 subagents, 5 aux tasks.*
 
 *Example rendering with sample data (Nord theme): language + currency
 toggles (EN / € active), calendar range presets*
