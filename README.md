@@ -1,5 +1,16 @@
 # hermes-usage-history-rpc
 
+> [!IMPORTANT]
+> **Upcoming: this repo will be merged into
+> [`hermes-token-stats`](https://github.com/AndiAtom/hermes-token-stats)
+> and archived.** All development, releases and install paths move there
+> (backend code lands as `backend/`). Versions unify to a single `v1.0.0`
+> (the client `v5.x` and this repo's `v0.x` lines both end there). This
+> repo stays readable as-is, and existing installs keep working via
+> `install.sh` re-runs — follow
+> [`hermes-token-stats`](https://github.com/AndiAtom/hermes-token-stats)
+> for the migration notes when v1.0.0 ships.
+
 Server-side usage analytics for [Hermes Agent](https://github.com/NousResearch/hermes-agent):
 two patched-in gateway RPCs **plus** a known-ledger daemon + plugin backend
 serving **monotonic** (compression-safe) token counters.
