@@ -1,12 +1,20 @@
 # hermes-token-stats
 
 > [!NOTE]
-> **Merged monorepo (v1.0.0).** The former companion backend repo
-> `hermes-usage-history-rpc` has been merged into this repository as
-> `backend/` — its history is preserved here. The old repo is archived;
-> all development, releases and install paths happen in THIS repo.
-> Versions unified to a single `v1.0.0` (client `v5.x` and backend `v0.x`
-> lines both ended there).
+> **Merged monorepo (v1.0.0).** This repository is the single home of the
+> token-stats project:
+>
+> | Path | What |
+> |---|---|
+> | `plugin.js` | **Desktop plugin** — statusbar chip + pane (runs in the Hermes desktop app and the Hermes WebApp) |
+> | `backend/` | **Backend stack** — known-ledger daemon (systemd), plugin backend routes (`/api/plugins/token-stats/`), web dashboard pane entry, installer |
+> | `docs/`, `test_*.mjs`, `backend/test_*.py` | Mockup, pricing/i18n tests, backend test suites |
+>
+> The former backend repo `hermes-usage-history-rpc` was merged in via an
+> unrelated-history merge (its full commit history is preserved) and is
+> **archived**. Versions are unified since v1.0.0: one version number for
+> repo, plugin, web entry and backend — the client `v5.x` line and the
+> backend `v0.x` line both ended with the merge.
 
 <p align="center">
   <img src="docs/token-stats-icon.svg" width="96" alt="Token Stats icon" />
@@ -138,32 +146,69 @@ estimate).*
 
 ## Install
 
-**Requires the backend** — shipped in THIS repo under `backend/`
-(daemon + plugin backend under `/api/plugins/token-stats/`). The plugin
-reads the ledger backend (monotonic, compression-safe counters via
-`ctx.rest`); without it the pane degrades to live-only sessions (marked
-`live only`). Install the backend FIRST on the machine running the
-gateway/dashboard service:
+Two ways — pick what you need. Both come from the same one-liner:
 
 ```bash
-# one-liner (clones this repo to ~/.hermes-token-stats, then installs):
+curl -fsSL https://raw.githubusercontent.com/AndiAtom/hermes-token-stats/main/backend/install.sh | bash -s -- [MODE] [--yes]
+```
+
+### Full stack (default) — chip + pane WITH history
+
+Installs the **known-ledger backend** (plugin backend routes under
+`/api/plugins/token-stats/`, incl. the custom-prices store), the
+**ledger daemon** (systemd unit, polls `state.db` read-only every 15 s,
+monotonic counters that survive compression resets), the **web dashboard
+pane**, and the **desktop plugin file**. This is what the feature set in
+this README assumes — without the backend the pane degrades to live-only
+sessions (marked `live only`, no history, no custom prices via the
+backend route).
+
+```bash
+# on the machine running the dashboard (port 9119):
 curl -fsSL https://raw.githubusercontent.com/AndiAtom/hermes-token-stats/main/backend/install.sh | bash -s -- --yes
 
 # or from a checkout:
 ( cd backend && ./install.sh )
 ```
 
-then:
+The installer is idempotent — re-run any time (e.g. after a `git pull`).
+A preflight checks every path and prerequisite before touching anything;
+`--doctor` runs the check alone. Non-root installs get a systemd **user
+unit** automatically (no sudo needed).
+
+Then in the desktop app: ⌘K → **Reload desktop plugins**.
+
+### Client-only (`--client-only`) — chip + live pane, zero server-side setup
+
+Installs just the desktop plugin file
+(`plugin.js → ~/.hermes/desktop-plugins/token-stats/`). No backend, no
+daemon, no config edit, no dashboard restart. The pane then shows
+live-only data (no session history). Manual custom prices still work —
+drop a `prices.json` next to the plugin file.
 
 ```bash
-mkdir -p ~/.hermes/desktop-plugins/token-stats
-cp plugin.js ~/.hermes/desktop-plugins/token-stats/plugin.js
+curl -fsSL https://raw.githubusercontent.com/AndiAtom/hermes-token-stats/main/backend/install.sh | bash -s -- --client-only --yes
 ```
 
-Then in the app: ⌘K → **Reload desktop plugins**.
+Want history later? Re-run without `--client-only` on the machine
+running the dashboard.
 
-> The app loads plugins from ITS OWN disk — editing a copy on a remote gateway
-> host does nothing for a desktop running on another machine.
+### Useful flags
+
+| Flag | Effect |
+|---|---|
+| `--client-only` | desktop plugin file only (see above) |
+| `--hermes-home <dir>` | Hermes home directory (default `~/.hermes`; wins over the `HERMES_HOME` env) |
+| `--yes` / `ASSUME_YES=1` | non-interactive |
+| `--doctor` | environment check only, installs nothing |
+| `--no-daemon` | backend routes + web entry, but no systemd daemon |
+
+> The desktop app loads plugins from ITS OWN disk — installing on a remote
+> gateway host does nothing for a desktop running on another machine;
+> install the client part on the desktop's machine, the backend on the
+> dashboard's machine. (For the Hermes **WebApp** the desktop plugin runs
+> on the gateway host, so there `--client-only` on the host is enough —
+> see *Hermes WebApp pane* below.)
 
 ## Web dashboard pane
 
@@ -196,15 +241,15 @@ Since Hermes v0.22.6 the gateway can also serve the **WebApp** — the full
 desktop bundle in the browser (gateway port 9120), a third surface next to
 the packaged desktop app and the web dashboard. The desktop plugin runs
 there **as-is**: pane and statusbar chip render and work in the WebApp
-already (rudimentary — first-class support is planned for v5.3, see
+already (rudimentary — first-class support is planned for v1.1, see
 roadmap).
 
-Install is manual for now (v5.3 will document and smooth this path):
+Install via the installer's client-only mode (on the Hermes host):
 
 ```bash
 # on the machine running the gateway (the Hermes host):
-mkdir -p ~/.hermes/desktop-plugins/token-stats
-cp plugin.js ~/.hermes/desktop-plugins/token-stats/plugin.js
+curl -fsSL https://raw.githubusercontent.com/AndiAtom/hermes-token-stats/main/backend/install.sh | bash -s -- --client-only --yes
+# or from a checkout: plugin.js → ~/.hermes/desktop-plugins/token-stats/
 # then reload the WebApp in the browser
 ```
 
@@ -369,6 +414,66 @@ The gateway's `input` already **excludes** cached tokens
 
 ## Roadmap
 
+> **Versioning since v1.0.0:** ONE unified version number for everything —
+> repo, desktop plugin, web entry, backend, releases. The client lines
+> (v4/v5.x) and the former backend repo's line (v0.x) both ended with the
+> v1.0.0 monorepo merge; the old `-web.N` suffix is retired.
+
+**v1.0.0 (shipped — the monorepo release)**
+
+- **Monorepo merge:** the former backend repo
+  [`hermes-usage-history-rpc`](https://github.com/AndiAtom/hermes-usage-history-rpc)
+  was merged into this repository (unrelated-history merge — its full
+  commit history is preserved here) and **archived**. The backend lives on
+  as [`backend/`](backend/) (ledger daemon, plugin backend routes, web
+  dashboard entry, installer). All development, releases and install
+  paths happen in THIS repo from now on.
+- **Legacy gateway RPCs retired:** the `usage.history` / `usage.totals`
+  JSON-RPC methods (patched into the gateway's `server.py`) are gone.
+  The plugin backend (`/api/plugins/token-stats/*`) is the only data
+  path; the installer no longer touches `$HERMES_LIB` — **Hermes updates
+  no longer wipe anything this installer deploys**. Old Hermes installs
+  (< 0.21.4, no plugin backend support) degrade gracefully to live-only.
+- **Custom prices (user price overrides):** maintain your own prices for
+  models the built-in tables don't cover — `prices.json` next to the
+  plugin (desktop) or `PUT /api/plugins/token-stats/prices` (backend).
+  See [*Custom prices*](#custom-prices-v100).
+- **Pane polish:** the TOTAL summary label baseline is fixed (region
+  toggle buttons no longer shift it), pane retitled to
+  **“Token Stats Ledger”**.
+- **Two install modes:** `install.sh` default (full ledger stack) and
+  `--client-only` (desktop plugin file only). See
+  [*Install*](#install).
+
+**v1.1.0 (planned)** — first-class **Hermes WebApp** support (the
+browser-hosted desktop served by the gateway, Hermes ≥ v0.22.6). The pane
+and chip already render and work in the WebApp as-is (see *Hermes WebApp
+pane* above); v1.1 turns that into first-class support:
+
+- **Mobile interface** — the WebApp is the natural surface for phones;
+  the pane needs responsive treatment for small screens (the fixed 380px
+  desktop-pane geometry does not translate to a phone browser)
+- **Documented, smooth install path** — today the WebApp pane is
+  installed by the installer's client-only mode (plugin.js to
+  `~/.hermes/desktop-plugins/token-stats/` on the Hermes host) plus a
+  WebApp reload; v1.1 documents this path properly and makes it a
+  one-step flow
+
+**v1.2.0 (planned, scope flexible)** — consumer tracking for external AI
+stacks via LiteLLM:
+
+- Optional integration with a self-hosted [LiteLLM](https://github.com/BerriAI/litellm)
+  proxy: the backend reads its Postgres spend logs and the pane shows
+  **consumers** (services that run models OUTSIDE Hermes — e.g. Honcho,
+  Hindsight) as a fourth breakdown section with tokens + cost per service
+- **Fully optional:** this only covers usage that never touches Hermes.
+  Hermes' own usage keeps flowing through the existing state.db ledger,
+  unchanged — a setup without external stacks needs **no LiteLLM and no
+  reconfiguration at all**
+
+<details>
+<summary><strong>Release history before v1.0.0 (unified era only — back then split across two repos)</strong></summary>
+
 **Shipped in v5.2.x** — server-side window aggregation + full-window
 display list (fixes silently shrinking window totals AND vanishing days):
 
@@ -395,46 +500,17 @@ desktop pane and the web dashboard pane:
   prices by 1.1 (Mistral's api.eu.mistral.ai premium)
 - Same `localStorage` key on both surfaces (`token-stats:region`);
   unpriced rows stay `—`, free models stay `0,00 €` in EU mode
-- Web dashboard moved to lockstep versioning with the desktop
-  (v5.1.1 ↔ v5.1.1-web.1)
 
-**Shipped in v5.0.x** — language & currency support for both the desktop
-pane and the web dashboard pane:
+**Shipped in v5.0.x** — language & currency support for both surfaces:
 
 - **Language toggle** — UI languages DE, EN (default), FR, NL, IT;
   further languages via GitHub issue (*Language request* template)
 - **Currency toggle** — € / $ display for all cost estimates; the
-  histogram's cost-metric icon follows the selection (v5.0.3)
-- Desktop: toggles in the chip menu AND the pane header (v5.0.1+)
+  histogram's cost-metric icon follows the selection
 - Both settings persist via `localStorage` and apply to the desktop pane
   and the web dashboard pane alike
 
-**v5.3.0 (planned)** — smoother support for the **Hermes WebApp** (the
-browser-hosted desktop served by the gateway, Hermes ≥ v0.22.6). The pane
-and chip already render and work in the WebApp as-is (see *Hermes WebApp
-pane* above); v5.3 turns that into first-class support:
-
-- **Mobile interface** — the WebApp is the natural surface for phones;
-  the pane needs responsive treatment for small screens (the fixed 380px
-  desktop-pane geometry does not translate to a phone browser)
-- **Documented, smooth install path** — today the WebApp pane is
-  installed by manually copying `plugin.js` to
-  `~/.hermes/desktop-plugins/token-stats/` on the Hermes host and
-  reloading the WebApp; v5.3 documents this path properly and makes it
-  a one-step flow
-
-**v6.0.0 (planned)** — consumer tracking for external AI stacks via
-LiteLLM:
-
-- Optional integration with a self-hosted [LiteLLM](https://github.com/BerriAI/litellm)
-  proxy: the companion backend reads its Postgres spend logs and the
-  pane shows **consumers** (services that run models OUTSIDE Hermes —
-  e.g. Honcho, Hindsight) as a fourth breakdown section with tokens +
-  cost per service
-- **Fully optional**: this only covers usage that never touches Hermes.
-  Hermes' own usage keeps flowing through the existing state.db ledger,
-  unchanged — a setup without external stacks needs **no LiteLLM and no
-  reconfiguration at all**
+</details>
 
 ## Known pitfalls (encoded in blood)
 

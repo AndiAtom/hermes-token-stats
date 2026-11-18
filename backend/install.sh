@@ -22,10 +22,26 @@
 # python (venv shim → tools python) and only VERIFIES importability instead
 # of pip-installing anything — nothing outside Hermes itself is needed.
 #
+# token-stats installer — TWO install modes (v1.0.0):
+#
+#   1. Full ledger stack (default): plugin backend + known-ledger daemon
+#      (history pane with monotonic known counters, custom prices store,
+#      web dashboard pane) — everything runs against the dashboard :9119.
+#   2. Client-only (--client-only): solely the DESKTOP plugin file,
+#      plugin.js → ~/.hermes/desktop-plugins/token-stats/. No backend,
+#      no daemon, no dashboard restart — the pane then runs live-only
+#      (no session history). For users who just want the chip/pane
+#      without any server-side setup.
+#
 # One-liner (detects the pipe, clones the repo first, then re-execs itself):
-#   curl -fsSL https://raw.githubusercontent.com/AndiAtom/hermes-token-stats/main/backend/install.sh | bash -s -- --yes
+#
+#   full:      curl -fsSL https://raw.githubusercontent.com/AndiAtom/hermes-token-stats/main/backend/install.sh | bash -s -- --yes
+#   client:    curl -fsSL https://raw.githubusercontent.com/AndiAtom/hermes-token-stats/main/backend/install.sh | bash -s -- --client-only --yes
 #
 # Flags / env:
+#   --client-only    install only the desktop plugin file (no backend)
+#   --hermes-home X  Hermes home directory      (default ~/.hermes; env
+#                    HERMES_HOME applies too — flag wins over env)
 #   --no-daemon      skip the ledger daemon setup (plugin backend only)
 #   --no-restart     do not restart the dashboard (you do it yourself)
 #   --yes | ASSUME_YES=1   non-interactive (default answer yes)
@@ -58,7 +74,33 @@ if [ -z "${BASH_SOURCE[0]:-}" ]; then
   exec bash "$INSTALL_DIR/backend/install.sh" "$@"
 fi
 
-HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
+# --hermes-home <dir>: flag wins over the HERMES_HOME env (both optional;
+# default ~/.hermes). Parsed up front — the whole flag/arg processing is
+# ONE while/shift loop here so value flags can consume their argument.
+# The mode/update flags set shell vars consumed further below.
+DO_DAEMON=1
+DO_RESTART=1
+DOCTOR=0
+CLIENT_ONLY=0
+HERMES_HOME_ARG=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --client-only) CLIENT_ONLY=1 ;;
+    --no-daemon) DO_DAEMON=0 ;;
+    --no-restart) DO_RESTART=0 ;;
+    --yes) ASSUME_YES=1 ;;
+    --doctor) DOCTOR=1 ;;
+    --hermes-home) shift; [ $# -gt 0 ] && HERMES_HOME_ARG="$1" || { echo "[error] --hermes-home needs a directory argument" >&2; exit 2; } ;;
+    --hermes-home=*) HERMES_HOME_ARG="${1#--hermes-home=}" ;;
+    *) echo "[error] unknown flag: $1" >&2; exit 2 ;;
+  esac
+  shift
+done
+if [ -n "$HERMES_HOME_ARG" ]; then
+  HERMES_HOME="$HERMES_HOME_ARG"
+else
+  HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
+fi
 HERMES_LIB="${HERMES_LIB:-/usr/local/lib/hermes-agent}"
 # Installer layouts (curl installer) keep the checkout in $HERMES_HOME/hermes-agent
 # with NO /usr/local install — auto-detect that layout instead of dying in preflight.
@@ -84,23 +126,43 @@ else
   export PYTHONPATH
 fi
 
-DO_DAEMON=1
-DO_RESTART=1
-DOCTOR=0
-for arg in "$@"; do
-  case "$arg" in
-    --no-daemon) DO_DAEMON=0 ;;
-    --no-restart) DO_RESTART=0 ;;
-    --yes) ASSUME_YES=1 ;;
-    --doctor) DOCTOR=1 ;;
-    *) echo "[error] unknown flag: $arg" >&2; exit 2 ;;
-  esac
-done
+# (Arg parsing happened up front — see the while/shift loop near the top;
+# DO_DAEMON/DO_RESTART/DOCTOR/CLIENT_ONLY keep their parsed values.)
 
 say()  { printf '\033[1;32m[ok]\033[0m  %s\n' "$*"; }
 info() { printf '\033[1;34m[..]\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m[!!]\033[0m %s\n' "$*"; }
 die()  { printf '\033[1;31m[ERROR]\033[0m %s\n' "$*" >&2; exit 1; }
+
+# ── client-only: desktop plugin file only, then exit ──────────────────
+# No backend, no daemon, no dashboard restart, no config edit — the
+# plugin degrades gracefully (chip + live-only pane). Ledger backend
+# can be added later by re-running the installer WITHOUT --client-only.
+# (Placed here because it needs say/die — defined above. --doctor wins
+# over --client-only: a combined invocation checks the environment and
+# installs NOTHING, consistent with --doctor semantics.)
+if [ "$CLIENT_ONLY" = "1" ] && [ "$DOCTOR" = "0" ]; then
+  DEST_DIR="$HERMES_HOME/desktop-plugins/token-stats"
+  mkdir -p "$DEST_DIR"
+  install -m 0644 "$HERE/../plugin.js" "$DEST_DIR/plugin.js"
+  if diff -q "$HERE/../plugin.js" "$DEST_DIR/plugin.js" >/dev/null; then
+    say "client-only: plugin.js → $DEST_DIR/plugin.js"
+  else
+    die "client-only: plugin copy failed the diff check"
+  fi
+  cat <<EOF
+
+Done (client-only). What to check next:
+  • Desktop app: ⌘K → "Reload desktop plugins" — the Token Stats Ledger
+    chip + pane appear. Without the ledger backend the pane shows
+    live-only data (no session history, no custom prices via backend).
+  • Want history + custom prices later? Re-run this installer WITHOUT
+    --client-only on the machine running the dashboard (port 9119).
+  • Manual price overrides work even client-only: drop a prices.json
+    next to the plugin file (see the README "Custom prices").
+EOF
+  exit 0
+fi
 
 # ── Preflight ────────────────────────────────────────────────────────
 # Fail-fast environment check. Everything the later steps touch is verified

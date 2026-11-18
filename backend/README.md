@@ -198,7 +198,9 @@ Hermes install keeps the system unit as before — the scope follows the
 invoking user. A stale root-era system unit next to a user install is
 detected and warned about.
 
-Flags: `--no-daemon` (plugin backend only), `--no-restart`, `--yes` /
+Flags: `--client-only` (desktop plugin file only — no backend, no daemon),
+`--hermes-home <dir>` (Hermes home directory; default `~/.hermes`, wins
+over the `HERMES_HOME` env), `--no-daemon` (plugin backend only), `--no-restart`, `--yes` /
 `ASSUME_YES=1` (non-interactive), `--doctor` (check environment only).
 Env overrides: `HERMES_LIB`, `HERMES_HOME`, `DASHBOARD_PORT`, `LEDGER_BASE`,
 `INSTALL_DIR` + `REPO_URL` (curl-mode clone location/source).
