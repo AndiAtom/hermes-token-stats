@@ -1,5 +1,14 @@
 # hermes-token-stats
 
+> [!IMPORTANT]
+> **Upcoming: repository merge.** This repo will become the single home of
+> the token-stats project — the companion backend repo
+> [`hermes-usage-history-rpc`](https://github.com/AndiAtom/hermes-usage-history-rpc)
+> will be merged into this one (as `backend/`) and subsequently **archived**.
+> Versions unify to a single `v1.0.0` (client `v5.x` and backend `v0.x`
+> lines both end there). Watch/star **this** repo to stay updated — install
+> paths and release assets will be documented here before anything moves.
+
 <p align="center">
   <img src="docs/token-stats-icon.svg" width="96" alt="Token Stats icon" />
 </p>
