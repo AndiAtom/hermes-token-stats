@@ -4,3 +4,4 @@ AI-HELPER.md
 # Python
 __pycache__/
 *.pyc
+*.bundle
