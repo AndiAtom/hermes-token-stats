@@ -216,8 +216,10 @@ fi
 # ── 1. Plugin package (backend + web dashboard entry) ────────────────
 mkdir -p "$HERMES_HOME/plugins/token-stats"
 cp -r "$HERE/plugin_pkg/token-stats/." "$HERMES_HOME/plugins/token-stats/"
-# byte-verify (skip __pycache__ which the host may have created)
-if diff -r --exclude=__pycache__ "$HERE/plugin_pkg/token-stats" "$HERMES_HOME/plugins/token-stats" >/dev/null; then
+# byte-verify (skip __pycache__ which the host may have created, and
+# user_prices.json which is the USER's override store — v1.0.0: the file
+# is never shipped in the repo, so a leftover store must not fail deploys)
+if diff -r --exclude=__pycache__ --exclude=user_prices.json "$HERE/plugin_pkg/token-stats" "$HERMES_HOME/plugins/token-stats" >/dev/null; then
   say "plugin package → $HERMES_HOME/plugins/token-stats/ (backend + web entry)"
 else
   die "plugin package copy failed the diff check"
