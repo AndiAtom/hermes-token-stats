@@ -68,8 +68,8 @@ the selection persists via `ctx.storage` (`hermes.plugin.token-stats.chipShow`)
 across app restarts. At least one metric stays visible — hiding all is blocked.
 
 **Pane** (`panes` area): per-window token history for all sessions —
-known-ledger data via `ctx.rest` (fallback `usage.history` RPC, then
-live-only). Since v4.4:
+known-ledger data via `ctx.rest` (very old Hermes installs without plugin
+backend support fall back to live-only). Since v4.4:
 - **Calendar range presets**: 1d (today), 5d (Mon–Fri workweek), 7d (calendar
   week), 30d (running month), ∞ — buttons in the pane header, with the
   language + currency toggle row underneath (v5.0.1+)
@@ -139,15 +139,14 @@ estimate).*
 
 ## Install
 
-**Requires the companion gateway module**
+**Requires the companion backend**
 [hermes-usage-history-rpc](https://github.com/AndiAtom/hermes-usage-history-rpc):
 it ships the **known-ledger backend** (daemon + plugin backend under
-`/api/plugins/token-stats/`) AND the legacy `usage.history` / `usage.totals`
-JSON-RPC methods. The plugin prefers the ledger backend (monotonic,
-compression-safe counters via `ctx.rest`); without it the pane falls back to
-the RPC (plain state.db values); without both it degrades to live-only
-sessions (marked `live only`). Install the companion FIRST on the machine
-running the gateway/dashboard service, then:
+`/api/plugins/token-stats/`). The plugin reads the ledger backend
+(monotonic, compression-safe counters via `ctx.rest`); without it the pane
+degrades to live-only sessions (marked `live only`). Install the
+companion FIRST on the machine running the gateway/dashboard service,
+then:
 
 ```bash
 mkdir -p ~/.hermes/desktop-plugins/token-stats
@@ -224,7 +223,9 @@ plugin.js  ├─ Chip:  known (usePersistedUsage) ──┐
            │                                       ├─ max(live, known) per field
            ├─ Pane:  known (HistoryQuery)          │
            └─ Live overlay: session.usage events ──┘
-Fallback chain per query: ctx.rest ledger → usage.history RPC → live only
+Fallback chain per query: ctx.rest ledger → live only
+(v1.0.0: the usage.history RPC hop was removed with the retired gateway
+hooks; plugin.js retains a silent legacy attempt for old Hermes installs)
 ```
 
 `known` counters survive compression resets and rewinds (the ledger
