@@ -467,17 +467,27 @@ pane* above); v1.1 turns that into first-class support:
   WebApp reload; v1.1 documents this path properly and makes it a
   one-step flow
 
-**v1.2.0 (planned, scope flexible)** — consumer tracking for external AI
-stacks via LiteLLM:
+**v1.2.0 (planned)** — scope: consumer tracking + the native "hermes proxy"
 
-- Optional integration with a self-hosted [LiteLLM](https://github.com/BerriAI/litellm)
-  proxy: the backend reads its Postgres spend logs and the pane shows
-  **consumers** (services that run models OUTSIDE Hermes — e.g. Honcho,
-  Hindsight) as a fourth breakdown section with tokens + cost per service
-- **Fully optional:** this only covers usage that never touches Hermes.
-  Hermes' own usage keeps flowing through the existing state.db ledger,
-  unchanged — a setup without external stacks needs **no LiteLLM and no
-  reconfiguration at all**
+- **hermes-proxy integration:** `hermes proxy` (local OpenAI-compatible
+  forwarder to OAuth providers — external apps point at it with any bearer
+  token) needs proper coverage in the stats. Open questions to resolve at
+  build time (Andi 18.11.2026): how do proxied requests land in state.db
+  (source? billing_provider? separate profile?) — verify what the proxy
+  actually writes before designing anything. Goal: usage that runs
+  through the proxy must be visible in the pane (and priced correctly via
+  the custom-prices layer, incl. provider-scoped overrides if the proxy
+  reports its own provider string).
+- **LiteLLM consumer tracking** (previous plan for this slot, scope
+  flexible): optional integration with a self-hosted
+  [LiteLLM](https://github.com/BerriAI/litellm) proxy — the backend reads
+  its Postgres spend logs and the pane shows **consumers** (services that
+  run models OUTSIDE Hermes — e.g. Honcho, Hindsight) as a fourth
+  breakdown section with tokens + cost per service.
+  **Fully optional:** Hermes' own usage keeps flowing through the
+  existing state.db ledger, unchanged. If the native hermes-proxy route
+  covers the real-world use cases, LiteLLM can stay parked — decide at
+  build time which (or both) paths ship.
 
 <details>
 <summary><strong>Release history before v1.0.0 (unified era only — back then split across two repos)</strong></summary>
