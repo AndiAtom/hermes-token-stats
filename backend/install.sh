@@ -23,7 +23,7 @@
 # of pip-installing anything — nothing outside Hermes itself is needed.
 #
 # One-liner (detects the pipe, clones the repo first, then re-execs itself):
-#   curl -fsSL https://raw.githubusercontent.com/AndiAtom/hermes-usage-history-rpc/main/install.sh | bash -s -- --yes
+#   curl -fsSL https://raw.githubusercontent.com/AndiAtom/hermes-token-stats/main/backend/install.sh | bash -s -- --yes
 #
 # Flags / env:
 #   --no-daemon      skip the ledger daemon setup (plugin backend only)
@@ -34,7 +34,7 @@
 #   HERMES_LIB       Hermes install root   (default /usr/local/lib/hermes-agent)
 #   HERMES_HOME      Hermes home            (default ~/.hermes)
 #   DASHBOARD_PORT   dashboard port        (default 9119)
-#   INSTALL_DIR      curl-mode clone target (default ~/.hermes-usage-history-rpc)
+#   INSTALL_DIR      curl-mode clone target (default ~/.hermes-token-stats)
 #   REPO_URL         curl-mode clone source (default this repo on GitHub)
 set -euo pipefail
 
@@ -44,8 +44,8 @@ set -euo pipefail
 # templates WorkingDirectory= to the repo — a temp clone would break it),
 # then re-exec the installer from there with all flags preserved.
 if [ -z "${BASH_SOURCE[0]:-}" ]; then
-  REPO_URL="${REPO_URL:-https://github.com/AndiAtom/hermes-usage-history-rpc.git}"
-  INSTALL_DIR="${INSTALL_DIR:-$HOME/.hermes-usage-history-rpc}"
+  REPO_URL="${REPO_URL:-https://github.com/AndiAtom/hermes-token-stats.git}"
+  INSTALL_DIR="${INSTALL_DIR:-$HOME/.hermes-token-stats}"
   printf '\033[1;34m[..]\033[0m %s\n' "piped installer: cloning/updating $INSTALL_DIR from $REPO_URL"
   command -v git >/dev/null 2>&1 \
     || { printf '\033[1;31m[ERROR]\033[0m %s\n' "git not found — required for the curl install" >&2; exit 1; }
@@ -55,7 +55,7 @@ if [ -z "${BASH_SOURCE[0]:-}" ]; then
   else
     git clone --depth 1 "$REPO_URL" "$INSTALL_DIR"
   fi
-  exec bash "$INSTALL_DIR/install.sh" "$@"
+  exec bash "$INSTALL_DIR/backend/install.sh" "$@"
 fi
 
 HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"

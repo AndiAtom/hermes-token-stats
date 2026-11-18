@@ -1,13 +1,12 @@
 # hermes-token-stats
 
-> [!IMPORTANT]
-> **Upcoming: repository merge.** This repo will become the single home of
-> the token-stats project — the companion backend repo
-> [`hermes-usage-history-rpc`](https://github.com/AndiAtom/hermes-usage-history-rpc)
-> will be merged into this one (as `backend/`) and subsequently **archived**.
-> Versions unify to a single `v1.0.0` (client `v5.x` and backend `v0.x`
-> lines both end there). Watch/star **this** repo to stay updated — install
-> paths and release assets will be documented here before anything moves.
+> [!NOTE]
+> **Merged monorepo (v1.0.0).** The former companion backend repo
+> `hermes-usage-history-rpc` has been merged into this repository as
+> `backend/` — its history is preserved here. The old repo is archived;
+> all development, releases and install paths happen in THIS repo.
+> Versions unified to a single `v1.0.0` (client `v5.x` and backend `v0.x`
+> lines both ended there).
 
 <p align="center">
   <img src="docs/token-stats-icon.svg" width="96" alt="Token Stats icon" />
@@ -139,13 +138,21 @@ estimate).*
 
 ## Install
 
-**Requires the companion backend**
-[hermes-usage-history-rpc](https://github.com/AndiAtom/hermes-usage-history-rpc):
-it ships the **known-ledger backend** (daemon + plugin backend under
-`/api/plugins/token-stats/`). The plugin reads the ledger backend
-(monotonic, compression-safe counters via `ctx.rest`); without it the pane
-degrades to live-only sessions (marked `live only`). Install the
-companion FIRST on the machine running the gateway/dashboard service,
+**Requires the backend** — shipped in THIS repo under `backend/`
+(daemon + plugin backend under `/api/plugins/token-stats/`). The plugin
+reads the ledger backend (monotonic, compression-safe counters via
+`ctx.rest`); without it the pane degrades to live-only sessions (marked
+`live only`). Install the backend FIRST on the machine running the
+gateway/dashboard service:
+
+```bash
+# one-liner (clones this repo to ~/.hermes-token-stats, then installs):
+curl -fsSL https://raw.githubusercontent.com/AndiAtom/hermes-token-stats/main/backend/install.sh | bash -s -- --yes
+
+# or from a checkout:
+( cd backend && ./install.sh )
+```
+
 then:
 
 ```bash
@@ -160,7 +167,7 @@ Then in the app: ⌘K → **Reload desktop plugins**.
 
 ## Web dashboard pane
 
-The companion repo also ships a **web port of the pane** (`web-entry.js`,
+The repo also ships a **web port of the pane** (`web-entry.js`,
 served by the Hermes web dashboard — the same gateway process that runs the
 known-ledger backend). It renders as a dashboard page at `/token-stats`:
 
@@ -180,8 +187,7 @@ known-ledger backend). It renders as a dashboard page at `/token-stats`:
   (since web.3 / v5.1.1-web.1), same pricing factor and `localStorage`
   key as the desktop
 
-No separate install: it deploys with the backend (`install.sh` of the
-[companion repo](https://github.com/AndiAtom/hermes-usage-history-rpc)),
+No separate install: it deploys with the backend (`backend/install.sh`),
 then the dashboard serves it automatically.
 
 ## Hermes WebApp pane (early support)

@@ -1,15 +1,18 @@
-# hermes-usage-history-rpc
+# backend (hermes-token-stats)
+
+> [!NOTE]
+> Formerly the standalone repo `hermes-usage-history-rpc` — merged into the
+> [`hermes-token-stats`](https://github.com/AndiAtom/hermes-token-stats)
+> monorepo as `backend/` in v1.0.0. This README documents the backend
+> part.
 
 > [!IMPORTANT]
-> **Upcoming: this repo will be merged into
+> **This repo has been merged into
 > [`hermes-token-stats`](https://github.com/AndiAtom/hermes-token-stats)
-> and archived.** All development, releases and install paths move there
-> (backend code lands as `backend/`). Versions unify to a single `v1.0.0`
-> (the client `v5.x` and this repo's `v0.x` lines both end there). This
-> repo stays readable as-is, and existing installs keep working via
-> `install.sh` re-runs — follow
-> [`hermes-token-stats`](https://github.com/AndiAtom/hermes-token-stats)
-> for the migration notes when v1.0.0 ships.
+> and is now archived.** All development, releases and install paths have
+> moved there (this backend lives on as `backend/`). Versions unified to
+> a single `v1.0.0` (the client `v5.x` and this repo's `v0.x` lines both
+> ended there). This copy remains readable for reference.
 
 Server-side usage analytics for [Hermes Agent](https://github.com/NousResearch/hermes-agent):
 a known-ledger daemon + plugin backend serving **monotonic**
@@ -122,11 +125,11 @@ and follows the active theme. No Tailwind classes are used.
 
 > **Note — a third surface exists:** since Hermes ≥ v0.22.6 the gateway
 > can also serve the **WebApp** (the full desktop bundle in the browser,
-> port 9120). There the *desktop* plugin itself (`plugin.js` from the
-> companion repo) runs as-is — pane and chip already work there
+> port 9120). There the *desktop* plugin itself (`plugin.js`, documented
+> in the monorepo root README) runs as-is — pane and chip already work there
 > (rudimentary). That surface does not use `web-entry.js`; the ledger
 > backend answers unchanged. Smoothed WebApp support is roadmapped as
-> client v5.3 (see the [companion repo's roadmap](https://github.com/AndiAtom/hermes-token-stats#roadmap)).
+> client v5.3 (see the [roadmap in the monorepo root](https://github.com/AndiAtom/hermes-token-stats#roadmap)).
 
 | Scope | Web port |
 |---|---|
@@ -153,8 +156,8 @@ install.sh                             # Idempotent installer (plugin backend + 
 ## Install / re-install after a Hermes update
 
 ```bash
-# One-liner (clones the repo to ~/.hermes-usage-history-rpc, then installs):
-curl -fsSL https://raw.githubusercontent.com/AndiAtom/hermes-usage-history-rpc/main/install.sh | bash -s -- --yes
+# One-liner (clones the monorepo to ~/.hermes-token-stats, then installs):
+curl -fsSL https://raw.githubusercontent.com/AndiAtom/hermes-token-stats/main/backend/install.sh | bash -s -- --yes
 
 # Or from a checkout / re-run after a Hermes update:
 ./install.sh
@@ -250,7 +253,7 @@ daemon, routes and web entry unchanged):
 
 - `curl -fsSL .../install.sh | bash -s -- --yes` now works out of the box:
   a piped installer detects the missing `BASH_SOURCE`, clones the repo to a
-  persistent location (`~/.hermes-usage-history-rpc`, override via
+  persistent location (`~/.hermes-token-stats`, override via
   `INSTALL_DIR`/`REPO_URL` — persistent because the daemon unit templates
   `WorkingDirectory=` to the repo), then re-execs itself from there with all
   flags preserved. Re-runs of the one-liner `git pull` the clone first.
