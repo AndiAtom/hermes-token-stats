@@ -12,24 +12,29 @@
 > for the migration notes when v1.0.0 ships.
 
 Server-side usage analytics for [Hermes Agent](https://github.com/NousResearch/hermes-agent):
-two patched-in gateway RPCs **plus** a known-ledger daemon + plugin backend
-serving **monotonic** (compression-safe) token counters.
+a known-ledger daemon + plugin backend serving **monotonic**
+(compression-safe) token counters.
 
 ## What it does
 
-Two new JSON-RPC methods for the Hermes gateway that read **persistent** token/cost
-data from `state.db` — client-independent and across gateway restarts (the gap:
-the existing `session.usage` RPC only serves live in-memory data of the focused
+The plugin backend reads **persistent** token/cost data from `state.db` —
+client-independent and across gateway restarts (the gap: the existing
+`session.usage` RPC only serves live in-memory data of the focused
 session).
-
-| Method | Parameters | Returns |
-|---|---|---|
-| `usage.history` | `days` (default 30, 0 = all time), `since` (unix ts), `limit` (default 200), `models` (bool, default true), `session_id` (deep dive) | `sessions: [...]` compact rows with token totals + `model_usage: [...]` per-model/task breakdown |
-| `usage.totals` | `days` / `since` | `totals` (sums), `by_model` (rollup), `by_day` (rollup with cost) |
 
 Data sources: `sessions` (lifetime totals per session) + `session_model_usage`
 (per model/task, including auxiliary tasks like `title_generation`,
 `background_review`). Read-only, no writes.
+
+> [!NOTE]
+> **Legacy gateway RPCs removed (v1.0.0).** The former
+> `usage.history` / `usage.totals` JSON-RPC methods (patched into the
+> gateway's `server.py`) have been retired — the plugin backend
+> (`/api/plugins/token-stats/*`, see below) is the supported data path.
+> The desktop client keeps a silent fallback for old Hermes installs
+> (< 0.21.4, which lack plugin backend support) and degrades those to
+> live-only data instead of crashing. This installer no longer touches
+`$HERMES_LIB`.
 
 ## Known-Ledger (monotonic counters)
 
@@ -72,8 +77,8 @@ Data sources: `sessions` (lifetime totals per session) + `session_model_usage`
 | `/api/plugins/token-stats/profiles` | — | available ledger profiles |
 | `/api/plugins/token-stats/health` | `profile` | daemon liveness via heartbeat (`source: heartbeat`), rows, age; `last_poll` fallback for pre-v0.5.0 ledger DBs |
 
-The RPCs (`usage.history`/`usage.totals`) remain as **legacy fallback** for
-the client (old gateways, OAuth remotes where `ctx.rest` is a no-op).
+The RPCs (`usage.history`/`usage.totals`) were removed in v1.0.0 — the
+plugin backend above is the only data path.
 
 ## Data availability — no backfill
 
@@ -90,9 +95,7 @@ the client (old gateways, OAuth remotes where `ctx.rest` is a no-op).
 > complete where it lies entirely after the ledger's first start — a
 > mid-month install undercounts (or misses) the days before it, and the
 > 30d running-month view only becomes fully trustworthy once a month
-> boundary has passed since the install. `usage.history` /
-> `usage.totals` (legacy, state.db-direct) have the same leading gap
-> plus their own monotonicity caveats.
+> boundary has passed since the install.
 
 ## Web dashboard plugin (v0.6.0)
 
@@ -134,7 +137,6 @@ and follows the active theme. No Tailwind classes are used.
 ## Layout
 
 ```
-tui_gateway/methods_usage_history.py   # Gateway module (HandlerRegistry pattern, like methods_session.py)
 ledger/schema.sql                      # Ledger DB schema (ledger_rows, ledger_events, ledger_meta; WAL)
 ledger/engine.py                       # Delta engine: known/last_db/live_db per grain+counter (v0.5.0: write-sparse)
 ledger/poller.py                       # state.db → rows mapping (read-only snapshot, v0.5.0: archive cut-off)
@@ -145,7 +147,7 @@ plugin_pkg/token-stats/dashboard/      # Backend routes (plugin_api.py) + web-da
 test_ledger_engine.py                  # Delta-rule unit tests (incl. write-sparsity regressions)
 test_ledger_poller.py                  # Poller cut-off/reappear/heartbeat tests (v0.5.0)
 test_plugin_api.py                     # Backend route tests (TestClient, isolated ENV)
-install.sh                             # Idempotent installer (module copy + server.py hooks)
+install.sh                             # Idempotent installer (plugin backend + config + daemon)
 ```
 
 ## Install / re-install after a Hermes update
@@ -159,24 +161,28 @@ curl -fsSL https://raw.githubusercontent.com/AndiAtom/hermes-usage-history-rpc/m
 ```
 
 All-in-one installer for the full stack — plugin package (backend routes +
-web dashboard entry), `plugins.enabled` entry, legacy gateway RPC hooks,
-known-ledger systemd daemon, dashboard restart and a smoke check. Idempotent:
-safe to re-run at any time (e.g. after a Hermes update wiped the server.py
-hooks, or after a `git pull`). No third-party dependencies — the ledger
-daemon is pure stdlib, fastapi/ruamel come with the Hermes runtime, and the
-installer only verifies their importability.
+web dashboard entry), `plugins.enabled` entry, known-ledger systemd daemon,
+dashboard restart and a smoke check. Idempotent: safe to re-run at any
+time (e.g. to refresh the plugin package after a `git pull`). No
+third-party dependencies — the ledger daemon is pure stdlib, fastapi/ruamel
+come with the Hermes runtime, and the installer only verifies their
+importability.
+
+> [!NOTE]
+> **v1.0.0:** the gateway hook step (legacy `usage.history` /
+> `usage.totals`, `server.py` patching) is gone. Hermes updates no longer
+> wipe anything this installer applies — re-running after an update is now
+> only needed if the plugin package itself changed.
 
 Before touching anything, the installer runs a **preflight** that checks
 every path and prerequisite it will need: Hermes install root (git/venv and
 installer layouts are auto-detected), `config.yaml` presence and
 writability, the Python prerequisites (`sqlite3` for the daemon, `fastapi`
 for the plugin backend, `ruamel.yaml` for the config validation — a missing
-ruamel only downgrades that validation, it doesn't abort), the **patch
-anchors in `server.py`** (dry-run — if the anchors are missing, the
-installer refuses before writing a single byte), and systemd (containers
-without systemd degrade to `--no-daemon` instead of failing). Fatal items
-abort with the env knob that fixes them; `./install.sh --doctor` runs the
-check alone and exits.
+ruamel only downgrades that validation, it doesn't abort), and systemd
+(containers without systemd degrade to `--no-daemon` instead of failing).
+Fatal items abort with the env knob that fixes them; `./install.sh --doctor`
+runs the check alone and exits.
 
 **Non-root installs** get a systemd **user unit** (`systemctl --user`) for
 the ledger daemon — no sudo needed, ledger DBs stay in the user's home and
@@ -193,11 +199,9 @@ Flags: `--no-daemon` (plugin backend only), `--no-restart`, `--yes` /
 Env overrides: `HERMES_LIB`, `HERMES_HOME`, `DASHBOARD_PORT`, `LEDGER_BASE`,
 `INSTALL_DIR` + `REPO_URL` (curl-mode clone location/source).
 
-The server.py patch step is anchored on the `methods_connectors` import —
-if upstream ever restructures that import list, the installer fails loudly
-instead of patching something broken. The config.yaml edit inserts exactly
-one list item (no YAML round-trip — a library dump reflows the whole file);
-a backup is written next to the config first.
+The config.yaml edit is inserted surgically (exactly one list item, no YAML
+round-trip — a library dump reflows the whole file); a backup is written
+next to the config first.
 
 After installing, restart the service the **desktop app actually talks to**
 (`hermes-dashboard.service`, port 9119 — NOT `hermes-gateway.service`): the
@@ -207,14 +211,11 @@ non-interactive runs.
 ## Verification after install
 
 ```bash
-# RPC test in-process (imports tui_gateway.server, invokes the handlers):
-# Hermes-venv required (system python3 lacks deps like dotenv):
-/usr/local/lib/hermes-agent/venv/bin/python3 test_rpc.py
-
-# state.db must be untouched (read-only module):
+# state.db must be untouched (read-only backend):
 sqlite3 ~/.hermes/state.db "SELECT count(*) FROM sessions;"   # same before/after
 
-# Desktop app consumes it via host.request('usage.history', {days: 7})
+# Health route answers 200/401 (mounted) — see the smoke check above.
+# Desktop plugin consumes the backend via ctx.rest('/ledger?...').
 ```
 
 ## Roadmap
@@ -348,8 +349,7 @@ should run on Darwin as-is; the porting work is all around it:
   `sed`-isms) that needs BSD equivalents
 - no systemd on macOS: the daemon needs a launchd plist + `launchctl`
   setup (the `--no-daemon` degradation would already run cleanly today)
-- Hermes macOS install layout + `server.py` anchors need live
-  verification on real hardware
+- Hermes macOS install layout needs live verification on real hardware
 
 Blocked on: a decommissioned M1 Mac mini (Intel Macs are unsupported by
 Hermes itself). If you are a macOS user: run

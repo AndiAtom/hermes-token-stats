@@ -5,15 +5,17 @@
 #      (backend routes incl. the WEB DASHBOARD pane entry, web-entry.js)
 #   2. plugins.enabled += token-stats in ~/.hermes/config.yaml
 #      (edit via ruamel round-trip — comments preserved, backup first)
-#   3. Legacy gateway RPCs (usage.history / usage.totals) → server.py hooks
-#      (survive Hermes updates via re-run; idempotent, regex-anchored)
-#   4. Known-ledger daemon → systemd unit token-stats-ledger.service
+#   3. Known-ledger daemon → systemd unit token-stats-ledger.service
 #      (template paths to THIS repo + the chosen python, enable + start)
-#   5. Dashboard restart (port 9119) so the backend mounts
-#   6. Smoke check (health route answers 200/401 = mounted, 404 = not)
+#   4. Dashboard restart (port 9119) so the backend mounts
+#   5. Smoke check (health route answers 200/401 = mounted, 404 = not)
 #
-# Idempotent: safe to re-run at any time (e.g. after a Hermes update wiped
-# the server.py hooks, or to refresh the plugin package after a git pull).
+# Idempotent: safe to re-run at any time (e.g. to refresh the plugin
+# package after a git pull).
+#
+# NOTE (v1.0.0): the legacy gateway RPC hooks (usage.history /
+# usage.totals, server.py patching) were REMOVED — the plugin backend is
+# the supported data path. This installer no longer touches $HERMES_LIB.
 #
 # Python: the daemon is pure stdlib; fastapi for the plugin backend comes
 # from the Hermes host runtime. The script therefore uses the Hermes-bundled
@@ -27,8 +29,8 @@
 #   --no-daemon      skip the ledger daemon setup (plugin backend only)
 #   --no-restart     do not restart the dashboard (you do it yourself)
 #   --yes | ASSUME_YES=1   non-interactive (default answer yes)
-#   --doctor         check the environment (paths, python prereqs, patch
-#                    anchors, systemd) and exit — install nothing
+#   --doctor         check the environment (paths, python prereqs,
+#                    systemd) and exit — install nothing
 #   HERMES_LIB       Hermes install root   (default /usr/local/lib/hermes-agent)
 #   HERMES_HOME      Hermes home            (default ~/.hermes)
 #   DASHBOARD_PORT   dashboard port        (default 9119)
@@ -38,7 +40,6 @@ set -euo pipefail
 
 # ── curl | bash bootstrap ─────────────────────────────────────────────
 # When this script is piped in (curl ... | bash), BASH_SOURCE is unset and
-# the repo payload (plugin_pkg/, ledger/, tui_gateway/) is not on disk. In
 # that case: clone the repo to a PERSISTENT location (the ledger daemon unit
 # templates WorkingDirectory= to the repo — a temp clone would break it),
 # then re-exec the installer from there with all flags preserved.
@@ -66,7 +67,6 @@ if [ ! -d "$HERMES_LIB" ] && [ -d "$HERMES_HOME/hermes-agent" ]; then
 fi
 DASHBOARD_PORT="${DASHBOARD_PORT:-9119}"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TG="$HERMES_LIB/tui_gateway"
 # Python resolution, layout-aware:
 #   git installs  → $HERMES_LIB/venv/bin/python (deps bundled)
 #   installer     → bundled tools python (deps live in the uv cache, same as the
@@ -101,8 +101,6 @@ say()  { printf '\033[1;32m[ok]\033[0m  %s\n' "$*"; }
 info() { printf '\033[1;34m[..]\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m[!!]\033[0m %s\n' "$*"; }
 die()  { printf '\033[1;31m[ERROR]\033[0m %s\n' "$*" >&2; exit 1; }
-# Preflight probes (anchor dry-check) must not abort under set -e.
-PYCHECK() { "$PY" "$@" 2>/dev/null || true; }
 
 # ── Preflight ────────────────────────────────────────────────────────
 # Fail-fast environment check. Everything the later steps touch is verified
@@ -162,35 +160,9 @@ else
   skp "python at $PY cannot import ruamel.yaml — config.yaml edit will skip the YAML parse validation"
 fi
 
-# (4) server.py + patch anchors (hard requirement — this is what gets patched)
-if [ -f "$TG/server.py" ]; then
-  # Writability: the hooks patch server.py + drop methods_usage_history.py
-  # into $TG — on hosts with a ROOT-owned Hermes install a non-root user
-  # cannot write there; fail HERE, not midway through the install.
-  if [ -w "$TG" ] && { [ ! -f "$TG/methods_usage_history.py" ] || [ -w "$TG/methods_usage_history.py" ]; }; then
-    WT=1
-  else
-    WT=0
-  fi
-  ANCHOR_ERR="$(PYCHECK - "$TG/server.py" <<'ANCHOREOF'
-import re, sys
-src = open(sys.argv[1]).read()
-if not re.search(r'methods_connectors as _methods_connectors([,)\n])', src):
-    print("import anchor (methods_connectors) missing")
-if src.find('for _m in (') == -1:
-    print("register anchor (for _m in) missing")
-ANCHOREOF
-)"
-  if [ -n "$ANCHOR_ERR" ]; then
-    bad "server.py found but $ANCHOR_ERR — Hermes version unknown to this installer; hooks will NOT be applied"
-  elif [ "$WT" = "1" ]; then
-    pass "server.py patch anchors present, $TG writable — RPC hooks can be applied"
-  else
-    bad "$TG is not writable by $(id -un) — the Hermes install is root-owned. Re-run with sudo (or as root) for the gateway hooks."
-  fi
-else
-  bad "server.py not found at $TG/server.py (set HERMES_LIB to the Hermes install root)"
-fi
+# (4) server.py writability — LEGACY CHECK REMOVED (v1.0.0): the installer
+# no longer patches $HERMES_LIB (no gateway hooks). Kept as a no-op block
+# marker so the preflight numbering in the README stays matching.
 
 # (5) systemd (daemon setup); degraded mode without it
 if [ "$DO_DAEMON" = "1" ]; then
@@ -385,69 +357,7 @@ PYEOF
   fi
 fi
 
-# ── 3. Legacy gateway RPCs (usage.history / usage.totals) ─────────────
-install -m 0644 "$HERE/tui_gateway/methods_usage_history.py" "$TG/methods_usage_history.py"
-say "methods_usage_history.py → $TG/"
-
-# server.py hooks (idempotent via marker check; regex anchors survive
-# upstream reformatting of the import block).
-TMP="$(mktemp)"
-cat > "$TMP" <<'PYEOF'
-import re, sys
-p = sys.argv[1]
-src = open(p).read()
-changed = False
-
-if 'methods_usage_history as _methods_usage_history' not in src:
-    # Import anchor: 'methods_connectors as _methods_connectors' plus the next
-    # punctuation (comma, parenthesis, or newline) — covers single-line and
-    # multi-line upstream imports.
-    m = re.search(r'methods_connectors as _methods_connectors([,)\n])', src)
-    if not m:
-        sys.exit('server.py: anchor (methods_connectors import) not found — check the Hermes version!')
-    tok = m.group(1)
-    add = 'methods_usage_history as _methods_usage_history'
-    if tok == ')':
-        repl = 'methods_connectors as _methods_connectors, ' + add + ')'
-    elif tok == ',':
-        repl = 'methods_connectors as _methods_connectors, ' + add + ','
-    else:  # Newline — add the module as its own line in the multi-line import
-        repl = 'methods_connectors as _methods_connectors,\n    ' + add + '\n'
-    src = src[:m.start()] + repl + src[m.end():]
-    changed = True
-
-# Register anchor: the for-_m-in tuple; insert the module before the closing parenthesis.
-# Existence check: _methods_usage_history must appear as a TUPLE ELEMENT — the
-# import alias alone (without a following comma) does not count as registered.
-fm = src.find('for _m in (')
-if fm == -1:
-    sys.exit('server.py: register anchor (for _m in) not found — check the Hermes version!')
-if not re.search(r'for _m in \([^)]*_methods_usage_history', src, re.S):
-    # comma-aware insert (v0.6.3): upstream tuples may end in ',)' (trailing
-    # comma, installer layout) — a blind ',' would produce ',,)' (syntax error).
-    close = src.find('):', fm)
-    if close == -1:
-        sys.exit('server.py: register anchor: closing parenthesis not found')
-    prev = src[fm:close].rstrip()[-1]
-    if prev in (',', '('):
-        # trailing comma already present (or empty tuple) — no extra comma
-        src = src[:close] + '\n    _methods_usage_history' + src[close:]
-    else:
-        src = src[:close] + ',\n    _methods_usage_history' + src[close:]
-    changed = True
-
-
-if changed:
-    open(p, 'w').write(src)
-    print('[ok] server.py hooks set')
-else:
-    print('[ok] server.py hooks already present')
-PYEOF
-"$PY" "$TMP" "$TG/server.py"
-"$PY" -c "import ast; ast.parse(open('$TG/server.py').read()); print('[ok] server.py syntax ok')"
-"$PY" -c "import ast; ast.parse(open('$TG/methods_usage_history.py').read()); print('[ok] methods_usage_history.py syntax ok')"
-
-# ── 4. Known-ledger daemon (systemd) ─────────────────────────────────
+# ── 3. Known-ledger daemon (systemd) ─────────────────────────────────
 if [ "$DO_DAEMON" = "1" ]; then
   LEDGER_BASE="${LEDGER_BASE:-$HOME/token-stats-ledger}"
   mkdir -p "$LEDGER_BASE"
@@ -523,7 +433,7 @@ if [ "$DO_DAEMON" = "1" ]; then
   fi
 fi
 
-# ── 5. Restart the dashboard so the backend + web entry mount ─────────
+# ── 4. Restart the dashboard so the backend + web entry mount ─────────
 # IMPORTANT: the desktop app and the web dashboard talk to the DASHBOARD
 # process (default port 9119), not the messaging gateway. The plugin
 # manifest/script caches are per-process — without a restart the new
@@ -564,7 +474,7 @@ if [ "$DO_RESTART" = "1" ]; then
   fi
 fi
 
-# ── 6. Smoke check ────────────────────────────────────────────────────
+# ── 5. Smoke check ────────────────────────────────────────────────────
 sleep 2
 CODE="$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$DASHBOARD_PORT/api/plugins/token-stats/health" || true)"
 case "$CODE" in
@@ -586,5 +496,4 @@ Done. What to check next:
   • Web dashboard:  open http://<host>:9119/token-stats  (hard-reload if open) — Token Stats tab in the sidebar
   • Desktop plugin: reload via ⌘K → "Reload desktop plugins" (companion repo AndiAtom/hermes-token-stats)
   • Daemon:         $STAT_CMD
-  • After a Hermes update the server.py hooks get wiped — re-run this script (idempotent).
 EOF
