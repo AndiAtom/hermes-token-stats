@@ -489,6 +489,20 @@ pane* above); v1.1 turns that into first-class support:
   covers the real-world use cases, LiteLLM can stay parked — decide at
   build time which (or both) paths ship.
 
+**v2.0.0 (planned, far future)** — cross-platform support:
+
+- **Windows and possibly macOS.** The ledger core (engine, poller, daemon)
+  is pure Python stdlib and should run as-is; the work is all around it:
+  the installer is GNU-flavored shell (grep -P, stat -c, ss, sed idioms),
+  systemd has no equivalent on Windows (a Windows service or scheduled
+  task would host the daemon; macOS would need a launchd plist), and the
+  Hermes install layouts on those platforms need live verification
+  against real hardware before any of it is promised.
+- No timeline yet. This lands when there is hardware to test on and
+  demand from users on those platforms; until then Linux is the only
+  supported platform. `--doctor` output attached to an issue tells us
+  most of what we would need to know without the hardware.
+
 <details>
 <summary><strong>Release history before v1.0.0 (unified era only — back then split across two repos)</strong></summary>
 
