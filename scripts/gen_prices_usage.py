@@ -94,8 +94,10 @@ def main() -> int:
         return 1
 
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
+    # Compact, sorted, stable: this is a generated data file, not something
+    # anyone reads line-by-line. Key-sorted so regeneration is a no-op diff.
     with open(OUT, "w", encoding="utf-8") as fh:
-        json.dump(data, fh, indent=1, sort_keys=True)
+        json.dump(data, fh, sort_keys=True, separators=(",", ":"))
         fh.write("\n")
     print(f"wrote {OUT}: {len(data['model'])} models, "
           f"{len(data['provider']['openrouter'])} openrouter, "
