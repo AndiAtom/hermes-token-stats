@@ -547,6 +547,11 @@ composes with all of the above — `/tokenstats session profile trading`
 reads the current session from the trading profile's ledger. See
 [*CLI: the `/tokenstats` command*](#cli-the-usage-command).
 
+Shipped as [PR #1](https://github.com/AndiAtom/hermes-token-stats/pull/1)
+by **[@Thorballer](https://github.com/Thorballer)** — the command plugin,
+the no-fork price architecture and the macOS support below are his
+contribution, the first external one to this repo.
+
 **v1.2.0 (planned)** — first-class **Hermes WebApp** support (the
 browser-hosted desktop served by the gateway, Hermes ≥ v0.22.6). The pane
 and chip already render and work in the WebApp as-is (see *Hermes WebApp
