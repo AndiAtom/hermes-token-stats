@@ -524,7 +524,7 @@ The gateway's `input` already **excludes** cached tokens
   `--client-only` (desktop plugin file only). See
   [*Install*](#install).
 
-**v1.1.0** — first-class **Hermes CLI** support. The ledger daemon
+**v1.1.0 (shipped)** — first-class **Hermes CLI** support. The ledger daemon
 already records everything, but a pure CLI user (no desktop app, no headless
 pane) had no way to *see* their numbers without opening a dashboard. This
 adds a `/tokenstats` slash command to the Hermes CLI so token stats are queryable
