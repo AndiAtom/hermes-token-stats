@@ -6,5 +6,8 @@ kind: standalone
 platforms:
   - linux
   - macos
-provides_hooks:
-  - register_command
+# NOTE: no provides_hooks/commands key — Hermes' validator buckets
+# ctx.register_command under "commands", which it checks against no
+# provides_* key; declaring it under provides_hooks ("register_command"
+# is not a hook name) only produces a false "declared but not
+# registered" warning from `hermes plugin validate`.

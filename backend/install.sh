@@ -560,12 +560,19 @@ for line in lines:
         in_plugins = True
         continue
     # Any other top-level key ends the block.
-    if in_plugins and not s.startswith((" ", "\t")) and s.strip():
+    if not s.startswith((" ", "\t")) and s.strip():
         in_plugins = False
         in_enabled = False
         continue
     if in_plugins and re.match(r"^\s+enabled:", s):
         in_enabled = True
+        continue
+    # A sibling key inside the plugins: block (e.g. `disabled:`) ENDS the
+    # enabled list — without this, last_item tracks list items of every
+    # following block too and `- usage` lands in the wrong list (verified
+    # against a stock config with enabled: + disabled: + entries:).
+    if in_enabled and re.match(r"^\s+\S", s) and not re.match(r"^\s+-\s+", s):
+        in_enabled = False
         continue
     if in_enabled and re.match(r"^\s+-\s+", s):
         # Remember where the LAST list item ends, so the new entry is

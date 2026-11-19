@@ -165,7 +165,7 @@ HELP = """Usage: /usage [1d|5d|7d|30d|all] [models] [profile NAME]
 
   /usage            token totals for the last 7 days (default)
   /usage 1d         today only (since local midnight)
-  /usage 5d         this workweek (Mon 00:00 - Sat 00:00)
+  /usage 5d         this workweek (since Mon 00:00)
   /usage 30d        this calendar month (since the 1st)
   /usage models     per-model breakdown for the window
   /usage profile X  read ledger profile X instead of 'default'
