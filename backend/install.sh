@@ -108,6 +108,8 @@ if [ ! -d "$HERMES_LIB" ] && [ -d "$HERMES_HOME/hermes-agent" ]; then
   HERMES_LIB="$HERMES_HOME/hermes-agent"
 fi
 DASHBOARD_PORT="${DASHBOARD_PORT:-9119}"
+# launchd label for the macOS ledger LaunchAgent (ignored on Linux).
+LAUNCHD_LABEL="${LAUNCHD_LABEL:-ai.hermes.token-stats-ledger}"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Python resolution, layout-aware:
 #   git installs  → $HERMES_LIB/venv/bin/python (deps bundled)
@@ -255,12 +257,30 @@ if [ "$DO_DAEMON" = "1" ]; then
         DO_DAEMON=0
       fi
     fi
+  elif [ "$(uname -s)" = "Darwin" ]; then
+    # macOS: launchd is the service manager. A per-user LaunchAgent needs
+    # no sudo and starts at login — the equivalent of a systemd user unit.
+    if command -v launchctl >/dev/null 2>&1; then
+      pass "launchd available (ledger daemon as LaunchAgent $LAUNCHD_LABEL)"
+      # A GUI LaunchAgent needs an Aqua login session; a plain SSH shell has
+      # none, so bootstrap would fail there (the plist is still written).
+      if launchctl print "gui/$(id -u)" >/dev/null 2>&1; then
+        pass "GUI login session present (LaunchAgent can bootstrap)"
+      else
+        skp "no GUI login session for uid $(id -u) — the plist is written but not bootstrapped; it starts at next login. To start now, run from a Terminal window in the GUI (not SSH)."
+      fi
+    else
+      skp "launchctl not found — degraded mode: --no-daemon, poll the ledger manually via '$PY -m ledger.daemon' in a loop"
+      DO_DAEMON=0
+    fi
   else
     skp "systemctl not found — degraded mode: --no-daemon, poll the ledger manually via '$PY -m ledger.daemon' in a loop"
     DO_DAEMON=0
   fi
 fi
-command -v ss >/dev/null 2>&1 || skp "ss not found — dashboard restart falls back to systemctl only"
+if [ "$(uname -s)" != "Darwin" ]; then
+  command -v ss >/dev/null 2>&1 || skp "ss not found — dashboard restart falls back to systemctl only"
+fi
 
 echo "  ── $P passed, $W warnings, $F fatal"
 if [ "$F" -gt 0 ]; then
@@ -288,6 +308,31 @@ else
 fi
 [ -f "$HERMES_HOME/plugins/token-stats/dashboard/web-entry.js" ] \
   || die "web-entry.js missing in the deployed package (outdated repo clone? git pull)"
+
+# /usage — native CLI plugin. Its own plugin ID: it needs no gateway route
+# (reads ledger.db directly in mode=ro) and must not inherit the desktop
+# plugin's namespace lock.
+mkdir -p "$HERMES_HOME/plugins/usage"
+cp -r "$HERE/plugin_pkg/usage/." "$HERMES_HOME/plugins/usage/"
+if diff -r --exclude=__pycache__ "$HERE/plugin_pkg/usage" "$HERMES_HOME/plugins/usage" >/dev/null; then
+  say "native plugin → $HERMES_HOME/plugins/usage/ (/usage command)"
+else
+  die "usage plugin copy failed the diff check"
+fi
+# /usage reads its price table from prices.json in that directory (generated
+# from plugin.js by scripts/gen_prices_usage.py). Without it every model shows
+# "—" for cost — exactly the pure-CLI case this plugin exists for — so a
+# missing table is fatal rather than a warning.
+[ -f "$HERMES_HOME/plugins/usage/prices.json" ] \
+  || die "prices.json missing from the deployed usage plugin (stale clone? run scripts/gen_prices_usage.py)"
+# Warn when the shipped table has drifted from the desktop plugin it mirrors.
+if [ -f "$HERE/plugin.js" ] && [ -f "$HERE/scripts/gen_prices_usage.py" ]; then
+  if "$PY" "$HERE/scripts/gen_prices_usage.py" --check >/dev/null 2>&1; then
+    pass "usage price table matches plugin.js"
+  else
+    warn "usage prices.json is out of date vs plugin.js — /usage costs may differ from the pane. Regenerate: python3 scripts/gen_prices_usage.py"
+  fi
+fi
 
 # ── 2. Enable the plugin in config.yaml (surgical text insert) ────────
 # NO YAML-library round-trip: ruamel reflows the ENTIRE file (indent flips,
@@ -421,11 +466,232 @@ PYEOF
   fi
 fi
 
-# ── 3. Known-ledger daemon (systemd) ─────────────────────────────────
+# The /usage plugin needs its own plugins.enabled entry — deploying the
+# directory alone leaves it unloaded, so /usage would not register. It is a
+# separate plugin ID from token-stats (it needs no ctx.rest namespace), so it
+# gets its own insert.
+#
+# Backup: the token-stats block above only writes $CONFIG.bak-token-stats when
+# it actually edits, so on a re-run (token-stats already enabled) there may be
+# no backup at all. Take one here when the first edit would not have.
+# True only when the PLUGINS block's enabled key is flow style. A bare
+# `grep enabled:` would also match unrelated blocks (`other: enabled: [...]`),
+# and the flow insert would then rewrite the wrong list.
+plugins_flow_enabled() {
+  "$PY" - "$CONFIG" <<'PYCHK'
+import re, sys
+lines = open(sys.argv[1], newline="").read().splitlines()
+in_plugins = False
+for s in lines:
+    if not s.startswith((" ", "\t")):
+        in_plugins = (s.strip() == "plugins:")
+        continue
+    if in_plugins and re.match(r"^\s+enabled:\s*\[", s):
+        sys.exit(0)
+sys.exit(1)
+PYCHK
+}
+
+if [ ! -f "$CONFIG.bak-token-stats" ]; then
+  cp "$CONFIG" "$CONFIG.bak-token-stats"
+fi
+if grep -qE '^\s*-\s*["'"'"']?usage["'"'"']?\s*$' "$CONFIG"; then
+  say "plugins.enabled already contains usage"
+else
+  if plugins_flow_enabled; then
+    # Flow style (`enabled: [a, b]`) has no `- item` lines to append after.
+    # Rewrite the flow list in place, anchored to the plugins block.
+    "$PY" - "$CONFIG" <<'PYEOF3'
+import re, sys
+
+path = sys.argv[1]
+raw = open(path, newline="").read()
+eol = "\r\n" if "\r\n" in raw else "\n"
+
+lines = raw.splitlines(keepends=True)
+in_plugins = False
+for i, line in enumerate(lines):
+    s = line.rstrip("\r\n")
+    # Only consider the top-level plugins: block — an `enabled: [...]`
+    # under any other key must never be touched.
+    if not s.startswith((" ", "\t")):
+        in_plugins = (s.strip() == "plugins:")
+        continue
+    if not in_plugins:
+        continue
+    m = re.match(r"^(\s+)enabled:\s*\[(.*)\]\s*$", s)
+    if not m:
+        continue
+    indent, body = m.group(1), m.group(2)
+    items = [x.strip().strip("'\"") for x in body.split(",") if x.strip()]
+    if "usage" in items:
+        sys.exit(0)
+    items.append("usage")
+    lines[i] = f"{indent}enabled: [{', '.join(items)}]" + eol
+    open(path, "w", newline="").writelines(lines)
+    print("[ok] plugins.enabled += usage (flow style)")
+    sys.exit(0)
+
+sys.exit("no flow-style enabled: list under plugins:")
+PYEOF3
+    if [ "$?" = "0" ]; then
+      if [ "${RUAMEL_OK:-0}" = "1" ]; then
+        "$PY" -c "from ruamel.yaml import YAML; d = YAML().load(open('$CONFIG')); assert 'usage' in d['plugins']['enabled'], 'usage entry missing'; print('[ok] config.yaml parses, usage enabled')" \
+          || die "config.yaml edit failed validation for usage — restore from $CONFIG.bak-token-stats (if present)"
+      fi
+    else
+      warn "could not add 'usage' to the flow-style plugins.enabled — add it by hand to enable /usage"
+    fi
+  elif grep -qE '^\s*enabled:' "$CONFIG"; then
+    "$PY" - "$CONFIG" <<'PYEOF2'
+import re, sys
+
+path = sys.argv[1]
+raw = open(path, newline="").read()
+eol = "\r\n" if "\r\n" in raw else "\n"
+lines = raw.splitlines(keepends=True)
+
+out, in_plugins, in_enabled, last_item = [], False, False, None
+for line in lines:
+    out.append(line)
+    s = line.rstrip("\r\n")
+    # A top-level `plugins:` block.
+    if not s.startswith((" ", "\t")) and s.strip() == "plugins:":
+        in_plugins = True
+        continue
+    # Any other top-level key ends the block.
+    if not s.startswith((" ", "\t")) and s.strip():
+        in_plugins = False
+        in_enabled = False
+        continue
+    if in_plugins and re.match(r"^\s+enabled:", s):
+        in_enabled = True
+        continue
+    # A sibling key inside the plugins: block (e.g. `disabled:`) ENDS the
+    # enabled list — without this, last_item tracks list items of every
+    # following block too and `- usage` lands in the wrong list (verified
+    # against a stock config with enabled: + disabled: + entries:).
+    if in_enabled and re.match(r"^\s+\S", s) and not re.match(r"^\s+-\s+", s):
+        in_enabled = False
+        continue
+    if in_enabled and re.match(r"^\s+-\s+", s):
+        # Remember where the LAST list item ends, so the new entry is
+        # appended at the end of the list rather than spliced into it.
+        last_item = len(out)
+
+if last_item is None:
+    sys.exit("no plugins.enabled list items found to append after")
+
+indent = re.match(r"^(\s+)-", lines[last_item - 1]).group(1)
+out.insert(last_item, indent + "- usage" + eol)
+
+open(path, "w", newline="").writelines(out)
+print("[ok] plugins.enabled += usage")
+PYEOF2
+    if [ "$?" = "0" ]; then
+      if [ "${RUAMEL_OK:-0}" = "1" ]; then
+        "$PY" -c "from ruamel.yaml import YAML; d = YAML().load(open('$CONFIG')); assert 'usage' in d['plugins']['enabled'], 'usage entry missing'; print('[ok] config.yaml parses, usage enabled')" \
+          || die "config.yaml edit failed validation for usage — restore from $CONFIG.bak-token-stats (if present)"
+      fi
+    else
+      warn "could not append 'usage' to plugins.enabled — add '    - usage' by hand to enable /usage"
+    fi
+  else
+    warn "no plugins.enabled section found — add '    - usage' under plugins: by hand to enable /usage"
+  fi
+fi
+
+# ── 3. Known-ledger daemon (systemd on Linux, launchd on macOS) ──────
 if [ "$DO_DAEMON" = "1" ]; then
   LEDGER_BASE="${LEDGER_BASE:-$HOME/token-stats-ledger}"
   mkdir -p "$LEDGER_BASE"
 
+if [ "$(uname -s)" = "Darwin" ]; then
+  # ── macOS: LaunchAgent ─────────────────────────────────────────────
+  # Per-user LaunchAgent (~/Library/LaunchAgents): no sudo, starts at login,
+  # dies with the session — the direct equivalent of the systemd user unit.
+  # RunAtLoad + KeepAlive replace enable-at-boot + Restart=always.
+  # Paths are absolute: launchd does no shell expansion.
+  LA_DIR="$HOME/Library/LaunchAgents"
+  LA_DST="$LA_DIR/$LAUNCHD_LABEL.plist"
+  LOG_DIR="$HOME/Library/Logs/token-stats"
+  mkdir -p "$LA_DIR" "$LOG_DIR"
+
+  # Escape XML metacharacters — a HOME path with & or < would otherwise
+  # produce a plist launchd refuses to parse.
+  xml_esc() { printf '%s' "$1" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'; }
+  PY_X="$(xml_esc "$PY")"
+  HERE_X="$(xml_esc "$HERE")"
+  LEDGER_X="$(xml_esc "$LEDGER_BASE")"
+  LOG_X="$(xml_esc "$LOG_DIR")"
+
+  cat > "$LA_DST" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>$LAUNCHD_LABEL</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>$PY_X</string>
+		<string>-m</string>
+		<string>ledger.daemon</string>
+	</array>
+	<key>WorkingDirectory</key>
+	<string>$HERE_X</string>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>PYTHONPATH</key>
+		<string>$HERE_X</string>
+		<key>LEDGER_BASE</key>
+		<string>$LEDGER_X</string>
+		<key>PYTHONUNBUFFERED</key>
+		<string>1</string>
+	</dict>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>KeepAlive</key>
+	<true/>
+	<key>ThrottleInterval</key>
+	<integer>15</integer>
+	<key>ProcessType</key>
+	<string>Background</string>
+	<key>StandardOutPath</key>
+	<string>$LOG_X/ledger.log</string>
+	<key>StandardErrorPath</key>
+	<string>$LOG_X/ledger.log</string>
+</dict>
+</plist>
+PLIST
+
+  if plutil -lint "$LA_DST" >/dev/null 2>&1; then
+    say "LaunchAgent written: $LA_DST"
+  else
+    bad "generated plist failed plutil validation — launchd would refuse it"
+  fi
+
+  # bootout first so a re-install reloads the new plist; it fails when the
+  # job is not loaded, which is the normal first-install case.
+  launchctl bootout "gui/$(id -u)/$LAUNCHD_LABEL" >/dev/null 2>&1 || true
+  if launchctl bootstrap "gui/$(id -u)" "$LA_DST" >/dev/null 2>&1; then
+    say "ledger daemon loaded (LaunchAgent $LAUNCHD_LABEL)"
+  else
+    warn "could not bootstrap the LaunchAgent now (no GUI session?) — it starts at next login. To start now, from a GUI Terminal: launchctl bootstrap gui/\$(id -u) \"$LA_DST\""
+  fi
+
+  sleep 2
+  ACTIVE=0
+  launchctl print "gui/$(id -u)/$LAUNCHD_LABEL" 2>/dev/null | grep -q "state = running" && ACTIVE=1
+  if [ "$ACTIVE" = "1" ]; then
+    say "ledger daemon active (LaunchAgent templated: python=$PY, repo=$HERE)"
+  elif launchctl print "gui/$(id -u)/$LAUNCHD_LABEL" >/dev/null 2>&1; then
+    warn "LaunchAgent loaded but not running — check: tail -30 $LOG_DIR/ledger.log"
+  else
+    info "LaunchAgent not loaded yet (starts at next login) — manual run: $PY -m ledger.daemon"
+  fi
+else
+  # ── Linux: systemd ─────────────────────────────────────────────────
   UNIT_SRC="$HERE/ledger/token-stats-ledger.service"
   # Template the unit: python + repo dir are host-specific and systemd does
   # no ~/$HOME expansion in ExecStart/WorkingDirectory. The sed patterns
@@ -496,6 +762,7 @@ if [ "$DO_DAEMON" = "1" ]; then
     warn "ledger daemon did not come up — check: journalctl $( [ "$(id -u)" = "0" ] || echo '--user') -u token-stats-ledger -n 30"
   fi
 fi
+fi
 
 # ── 4. Restart the dashboard so the backend + web entry mount ─────────
 # IMPORTANT: the desktop app and the web dashboard talk to the DASHBOARD
@@ -511,24 +778,36 @@ if [ "$DO_RESTART" = "1" ]; then
     fi
   fi
   # Fallback (and Andi's setup): dashboard runs as a bare process on the port.
-  if ! ss -tln 2>/dev/null | grep -q ":$DASHBOARD_PORT "; then
-    info "no listener on :$DASHBOARD_PORT — starting one"
-    setsid nohup hermes dashboard --host 0.0.0.0 --port "$DASHBOARD_PORT" --no-open \
-      >> "$HERMES_HOME/dashboard-restart.log" 2>&1 &
+  # `ss` and `setsid` are Linux-only: macOS uses lsof for the probe and a
+  # plain nohup launch (nohup already detaches; setsid only added a new
+  # session, which the installer does not need).
+  if [ "$(uname -s)" = "Darwin" ]; then
+    port_pid() { lsof -nP -iTCP:"$DASHBOARD_PORT" -sTCP:LISTEN -t 2>/dev/null | head -1; }
+    start_dashboard() {
+      nohup hermes dashboard --host 0.0.0.0 --port "$DASHBOARD_PORT" --no-open \
+        >> "$HERMES_HOME/dashboard-restart.log" 2>&1 &
+    }
   else
-    PID="$(ss -tlnp 2>/dev/null | grep ":$DASHBOARD_PORT " | grep -oP 'pid=\K[0-9]+' | head -1 || true)"
-    if [ -n "$PID" ]; then
-      kill "$PID"
-      for _ in $(seq 1 10); do ss -tln 2>/dev/null | grep -q ":$DASHBOARD_PORT " || break; sleep 1; done
+    port_pid() { ss -tlnp 2>/dev/null | grep ":$DASHBOARD_PORT " | grep -oP 'pid=\K[0-9]+' | head -1; }
+    start_dashboard() {
       setsid nohup hermes dashboard --host 0.0.0.0 --port "$DASHBOARD_PORT" --no-open \
         >> "$HERMES_HOME/dashboard-restart.log" 2>&1 &
-      info "old dashboard (PID $PID) killed, relaunching"
-    fi
+    }
+  fi
+  PID="$(port_pid || true)"
+  if [ -z "$PID" ]; then
+    info "no listener on :$DASHBOARD_PORT — starting one"
+    start_dashboard
+  else
+    kill "$PID" 2>/dev/null || true
+    for _ in $(seq 1 10); do [ -z "$(port_pid || true)" ] && break; sleep 1; done
+    start_dashboard
+    info "old dashboard (PID $PID) killed, relaunching"
   fi
   # wait for the port to accept connections again
   UP=0
   for _ in $(seq 1 20); do
-    if ss -tln 2>/dev/null | grep -q ":$DASHBOARD_PORT "; then UP=1; break; fi
+    if [ -n "$(port_pid || true)" ]; then UP=1; break; fi
     sleep 1
   done
   if [ "$UP" = "1" ]; then
@@ -549,7 +828,9 @@ case "$CODE" in
   *)   warn "smoke: unexpected status $CODE — check the dashboard log" ;;
 esac
 
-if [ "$(id -u)" = "0" ]; then
+if [ "$(uname -s)" = "Darwin" ]; then
+  STAT_CMD="launchctl print gui/\$(id -u)/$LAUNCHD_LABEL  (logs: tail -f ~/Library/Logs/token-stats/ledger.log)"
+elif [ "$(id -u)" = "0" ]; then
   STAT_CMD="systemctl status token-stats-ledger"
 else
   STAT_CMD="systemctl --user status token-stats-ledger"

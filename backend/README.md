@@ -344,23 +344,33 @@ path) is client-side and tracked in the
 A backend release only becomes necessary if the install flow ends up
 touching `install.sh` or the plugin package.
 
-**macOS (planned — once I get my hands on a Mac)** — the ledger core
-(`ledger/engine.py`, `poller.py`, `daemon.py`) is pure Python stdlib and
-should run on Darwin as-is; the porting work is all around it:
+**macOS** — supported for the ledger core and the daemon:
 
-- CI: run the ledger unit tests on a `macos-latest` GitHub Actions runner
-  (free for public repos) to verify the delta engine on Darwin — no
-  hardware needed for this step
-- `install.sh` uses GNU-only tooling (`grep -P`, `stat -c`, `ss`, some
-  `sed`-isms) that needs BSD equivalents
-- no systemd on macOS: the daemon needs a launchd plist + `launchctl`
-  setup (the `--no-daemon` degradation would already run cleanly today)
-- Hermes macOS install layout needs live verification on real hardware
+- **Core**: `ledger/engine.py`, `poller.py`, `daemon.py` are pure Python
+  stdlib and run on Darwin unmodified — verified by running the daemon
+  against a live `state.db` on macOS 15 (multi-profile discovery, first-poll
+  baselining and the idempotent no-op second cycle all behave as on Linux).
+- **Daemon**: no systemd on macOS, so `install.sh` now writes a per-user
+  **LaunchAgent** (`~/Library/LaunchAgents/ai.hermes.token-stats-ledger.plist`)
+  and bootstraps it with `launchctl`. `RunAtLoad` + `KeepAlive` replace the
+  systemd unit's enable-at-boot and restart-on-crash; logs go to
+  `~/Library/Logs/token-stats/ledger.log`. A LaunchAgent needs a GUI login
+  session — installing over plain SSH writes the plist but defers activation
+  to the next login (the doctor reports this).
+- **Installer**: `ss`, `setsid` and `grep -P` are Linux-only. The dashboard
+  restart path now branches on `uname -s`, using `lsof` for the port probe
+  and a plain `nohup` launch on Darwin. Verified with `bash -n` under
+  macOS's stock bash 3.2 and no bash-4-only constructs (`mapfile`,
+  `${x,,}`, `local -n`). One GNU-ism remains on the interpreter-probe path
+  (`sort -V`), which degrades gracefully to `command -v python3` on macOS.
 
-Blocked on: a decommissioned M1 Mac mini (Intel Macs are unsupported by
-Hermes itself). If you are a macOS user: run
+Remaining gap: **CI** still runs the ledger unit tests on Linux only. Add a
+`macos-latest` job to verify the delta engine on Darwin per release — no
+hardware required.
+
+If you are a macOS user: run
 `curl -fsSL .../install.sh | bash -s -- --doctor` and open an issue with
-the output — that tells us everything we need without the hardware.
+the output.
 
 ## Context
 

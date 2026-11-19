@@ -243,6 +243,76 @@ known-ledger backend). It renders as a dashboard page at `/token-stats`:
 No separate install: it deploys with the backend (`backend/install.sh`),
 then the dashboard serves it automatically.
 
+## CLI: the `/usage` command
+
+For pure CLI users — no desktop app, no dashboard — `/usage` reports the
+same numbers from the prompt:
+
+```
+/usage                 last 7 days (default)
+/usage 1d              today          (also 5d, 7d, 30d, all)
+/usage models          per-model breakdown for the window
+/usage profile trading read another ledger profile
+/usage --help          usage text
+```
+
+Sample:
+
+```
+Token Stats — all time (profile: default)
+──────────────────────────────────────────────
+  sessions     32
+  input        26.11M
+  cached       209.94M  (88.9% hit)
+  output       741.4k
+  tokens       236.79M
+  api calls    2411
+  cost         ≈$4.09
+──────────────────────────────────────────────
+  model                      tokens calls     cost
+  deepseek-v4-1-flash-1017  163.93M  1892    $4.09
+  gpt-6.1-sol                31.17M   191        —
+  ≈ unpriced models excluded from the cost total
+  ledger heartbeat: 3m ago
+```
+
+`/usage` is a **native Hermes plugin** (`backend/plugin_pkg/usage/`), not a
+desktop plugin: it opens `ledger.db` read-only and formats text, so it
+works in the CLI where there is no React host. It needs the ledger daemon
+running (installed by `install.sh`) — without it the command says so and
+points at `install.sh`.
+
+Windows are calendar-based like the pane's presets — `1d` since local
+midnight, `5d` this workweek (Mon 00:00), `30d` this calendar month, plus
+`all`; `7d` (the default) is the one rolling preset. Attribution uses real
+session activity (`last_activity_at` from `state.db`, falling back to the
+ledger's `first_seen`) — **not** the ledger's `last_poll`, which the daemon
+only advances when a counter moves, so for a quiet session it is neither
+last activity nor last poll.
+
+**Prices** ship as `prices.json` next to the plugin, **generated from
+`plugin.js`** by `scripts/gen_prices_usage.py` — the same `PRICES` /
+`PRICES_OPENROUTER` tables the chip and pane use, so there is no second
+copy to drift. Regenerate after changing a price (`python3
+scripts/gen_prices_usage.py`); a test fails if the two disagree.
+Resolution order matches the clients (`PRICES_PROVIDER[provider][model]` →
+`PRICES[model]` → `—`), and Nous is aliased to the OpenRouter catalog the
+way `plugin.js` does. Unpriced models print `—` and are excluded from the
+total (`≈` prefix) rather than contributing a fabricated number.
+
+Costs are **USD list price**. The pane's user overrides (`prices.json`
+overrides / the backend `/prices` route), the EU ×1.1 region factor and the
+€/$ display toggle are UI-only and are *not* applied here, so a user on
+default EUR display will see a number that differs by the conversion rate.
+If the price table cannot be found at all, cost shows `—` instead of a
+guess.
+
+Install:
+
+```bash
+hermes plugins enable usage
+```
+
 ## Hermes WebApp pane (early support)
 
 Since Hermes v0.22.6 the gateway can also serve the **WebApp** — the full
@@ -453,13 +523,25 @@ The gateway's `input` already **excludes** cached tokens
   `--client-only` (desktop plugin file only). See
   [*Install*](#install).
 
-**v1.1.0 (planned)** — first-class **Hermes CLI** support. The ledger daemon
-already records everything, but a pure CLI user (no desktop app, no
-headless pane) has no way to *see* their numbers without opening a
-dashboard. v1.1 adds `/` slash commands in the Hermes CLI so token stats
-are queryable directly from the prompt — e.g. session totals, per-model
-breakdowns and cost for the current day/week/month — served from the
-same plugin backend (no separate data path).
+**v1.1.0** — first-class **Hermes CLI** support. The ledger daemon already
+records everything, but a pure CLI user (no desktop app, no headless pane)
+had no way to *see* their numbers without opening a dashboard. This adds a
+`/usage` slash command to the Hermes CLI so token stats are queryable
+directly from the prompt:
+
+```
+/usage                 token totals for the last 7 days (default)
+/usage 1d              today only (also: 5d, 30d, all)
+/usage models          per-model breakdown for the window
+/usage profile trading read another ledger profile
+```
+
+It ships as a **native Hermes plugin** (`backend/plugin_pkg/usage/`) that
+reads `ledger.db` directly in `mode=ro` — no gateway route, no desktop
+app, and the same source the chip and pane read, so the numbers agree.
+Unpriced models render `—` and are excluded from the total (marked `≈`)
+rather than contributing a fabricated cost. See
+[*CLI: the `/usage` command*](#cli-the-usage-command).
 
 **v1.2.0 (planned)** — first-class **Hermes WebApp** support (the
 browser-hosted desktop served by the gateway, Hermes ≥ v0.22.6). The pane
