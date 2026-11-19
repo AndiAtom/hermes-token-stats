@@ -243,6 +243,62 @@ known-ledger backend). It renders as a dashboard page at `/token-stats`:
 No separate install: it deploys with the backend (`backend/install.sh`),
 then the dashboard serves it automatically.
 
+## CLI: the `/usage` command
+
+For pure CLI users — no desktop app, no dashboard — `/usage` reports the
+same numbers from the prompt:
+
+```
+/usage                 last 7 days (default)
+/usage 1d              today          (also 5d, 7d, 30d, all)
+/usage models          per-model breakdown for the window
+/usage profile trading read another ledger profile
+/usage --help          usage text
+```
+
+Sample:
+
+```
+Token Stats — all time (profile: default)
+──────────────────────────────────────────────
+  sessions     32
+  input        26.11M
+  cached       209.94M  (88.9% hit)
+  output       741.4k
+  tokens       236.79M
+  api calls    2411
+  cost         ≈$4.09
+──────────────────────────────────────────────
+  deepseek-v4-1-flash-1017    163.93M   1892    $4.09
+  gpt-6.1-sol                  31.17M    191        —
+  ≈ unpriced models excluded from the cost total
+  ledger heartbeat: 3m ago
+```
+
+`/usage` is a **native Hermes plugin** (`backend/plugin_pkg/usage/`), not a
+desktop plugin: it opens `ledger.db` read-only and formats text, so it
+works in the CLI where there is no React host. It needs the ledger daemon
+running (installed by `install.sh`) — without it the command says so and
+points at `install.sh`.
+
+Because a CLI command has no focused session, the default is an **aggregate
+over the window** rather than the chip's per-session reading.
+
+**Prices are read from `plugin.js`**, not duplicated. The CLI parses the
+same `PRICES` / `PRICES_OPENROUTER` tables the chip and pane use, so a cost
+reported by `/usage` is the cost the UI reports for the same ledger — no
+second copy to drift. Resolution order matches the clients exactly
+(`PRICES_PROVIDER[provider][model]` → `PRICES[model]` → `—`). Unpriced
+models print `—` and are left out of the total (`≈` prefix), matching the
+clients' no-fabricated-prices rule. If `plugin.js` cannot be located the
+command still works — it simply shows `—` for cost instead of guessing.
+
+Install:
+
+```bash
+hermes plugins enable usage
+```
+
 ## Hermes WebApp pane (early support)
 
 Since Hermes v0.22.6 the gateway can also serve the **WebApp** — the full
@@ -453,13 +509,25 @@ The gateway's `input` already **excludes** cached tokens
   `--client-only` (desktop plugin file only). See
   [*Install*](#install).
 
-**v1.1.0 (planned)** — first-class **Hermes CLI** support. The ledger daemon
-already records everything, but a pure CLI user (no desktop app, no
-headless pane) has no way to *see* their numbers without opening a
-dashboard. v1.1 adds `/` slash commands in the Hermes CLI so token stats
-are queryable directly from the prompt — e.g. session totals, per-model
-breakdowns and cost for the current day/week/month — served from the
-same plugin backend (no separate data path).
+**v1.1.0** — first-class **Hermes CLI** support. The ledger daemon already
+records everything, but a pure CLI user (no desktop app, no headless pane)
+had no way to *see* their numbers without opening a dashboard. This adds a
+`/usage` slash command to the Hermes CLI so token stats are queryable
+directly from the prompt:
+
+```
+/usage                 token totals for the last 7 days (default)
+/usage 1d              today only (also: 5d, 30d, all)
+/usage models          per-model breakdown for the window
+/usage profile trading read another ledger profile
+```
+
+It ships as a **native Hermes plugin** (`backend/plugin_pkg/usage/`) that
+reads `ledger.db` directly in `mode=ro` — no gateway route, no desktop
+app, and the same source the chip and pane read, so the numbers agree.
+Unpriced models render `—` and are excluded from the total (marked `≈`)
+rather than contributing a fabricated cost. See
+[*CLI: the `/usage` command*](#cli-the-usage-command).
 
 **v1.2.0 (planned)** — first-class **Hermes WebApp** support (the
 browser-hosted desktop served by the gateway, Hermes ≥ v0.22.6). The pane

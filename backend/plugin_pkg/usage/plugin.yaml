@@ -1,0 +1,10 @@
+name: usage
+version: 1.0.0
+description: "/usage slash command — token totals and cost from the token-stats known ledger (read-only)."
+author: Thorballer
+kind: standalone
+platforms:
+  - linux
+  - macos
+provides_hooks:
+  - register_command
