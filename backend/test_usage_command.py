@@ -1,4 +1,4 @@
-"""Tests for the /usage native plugin (backend/plugin_pkg/usage).
+"""Tests for the /tokenstats native plugin (backend/plugin_pkg/usage).
 
 Builds a throwaway ledger DB, points LEDGER_BASE at it, and drives the
 command handler end to end. No network, no Hermes core imports.
@@ -69,7 +69,7 @@ def test_registers_usage_command(usage):
             seen["kw"] = kw
 
     usage.register(Ctx())
-    assert seen["name"] == "usage"
+    assert seen["name"] == "tokenstats"
     assert seen["kw"]["description"]
     assert "args_hint" in seen["kw"]
     assert callable(seen["handler"])
@@ -208,11 +208,11 @@ def test_unknown_profile_lists_known_ones(usage, tmp_path):
 def test_unknown_argument_shows_help(usage):
     out = usage._handle_usage("wat")
     assert "unknown argument" in out.lower()
-    assert "Usage: /usage" in out
+    assert "Usage: /tokenstats" in out
 
 
 def test_help_flag(usage):
-    assert "Usage: /usage" in usage._handle_usage("--help")
+    assert "Usage: /tokenstats" in usage._handle_usage("--help")
 
 
 def test_handler_never_raises(usage, tmp_path, monkeypatch):

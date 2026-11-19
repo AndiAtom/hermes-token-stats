@@ -309,17 +309,17 @@ fi
 [ -f "$HERMES_HOME/plugins/token-stats/dashboard/web-entry.js" ] \
   || die "web-entry.js missing in the deployed package (outdated repo clone? git pull)"
 
-# /usage — native CLI plugin. Its own plugin ID: it needs no gateway route
+# /tokenstats — native CLI plugin (directory id stays "usage"). Its own plugin ID: it needs no gateway route
 # (reads ledger.db directly in mode=ro) and must not inherit the desktop
 # plugin's namespace lock.
 mkdir -p "$HERMES_HOME/plugins/usage"
 cp -r "$HERE/plugin_pkg/usage/." "$HERMES_HOME/plugins/usage/"
 if diff -r --exclude=__pycache__ "$HERE/plugin_pkg/usage" "$HERMES_HOME/plugins/usage" >/dev/null; then
-  say "native plugin → $HERMES_HOME/plugins/usage/ (/usage command)"
+  say "native plugin → $HERMES_HOME/plugins/usage/ (/tokenstats command)"
 else
   die "usage plugin copy failed the diff check"
 fi
-# /usage reads its price table from prices.json in that directory (generated
+# the plugin reads its price table from prices.json in that directory (generated
 # from plugin.js by scripts/gen_prices_usage.py). Without it every model shows
 # "—" for cost — exactly the pure-CLI case this plugin exists for — so a
 # missing table is fatal rather than a warning.
@@ -330,7 +330,7 @@ if [ -f "$HERE/plugin.js" ] && [ -f "$HERE/scripts/gen_prices_usage.py" ]; then
   if "$PY" "$HERE/scripts/gen_prices_usage.py" --check >/dev/null 2>&1; then
     pass "usage price table matches plugin.js"
   else
-    warn "usage prices.json is out of date vs plugin.js — /usage costs may differ from the pane. Regenerate: python3 scripts/gen_prices_usage.py"
+    warn "usage prices.json is out of date vs plugin.js — /tokenstats costs may differ from the pane. Regenerate: python3 scripts/gen_prices_usage.py"
   fi
 fi
 
@@ -466,8 +466,8 @@ PYEOF
   fi
 fi
 
-# The /usage plugin needs its own plugins.enabled entry — deploying the
-# directory alone leaves it unloaded, so /usage would not register. It is a
+# The usage plugin needs its own plugins.enabled entry — deploying the
+# directory alone leaves it unloaded, so /tokenstats would not register. It is a
 # separate plugin ID from token-stats (it needs no ctx.rest namespace), so it
 # gets its own insert.
 #
@@ -540,7 +540,7 @@ PYEOF3
           || die "config.yaml edit failed validation for usage — restore from $CONFIG.bak-token-stats (if present)"
       fi
     else
-      warn "could not add 'usage' to the flow-style plugins.enabled — add it by hand to enable /usage"
+      warn "could not add 'usage' to the flow-style plugins.enabled — add it by hand to enable /tokenstats"
     fi
   elif grep -qE '^\s*enabled:' "$CONFIG"; then
     "$PY" - "$CONFIG" <<'PYEOF2'
@@ -594,10 +594,10 @@ PYEOF2
           || die "config.yaml edit failed validation for usage — restore from $CONFIG.bak-token-stats (if present)"
       fi
     else
-      warn "could not append 'usage' to plugins.enabled — add '    - usage' by hand to enable /usage"
+      warn "could not append 'usage' to plugins.enabled — add '    - usage' by hand to enable /tokenstats"
     fi
   else
-    warn "no plugins.enabled section found — add '    - usage' under plugins: by hand to enable /usage"
+    warn "no plugins.enabled section found — add '    - usage' under plugins: by hand to enable /tokenstats"
   fi
 fi
 

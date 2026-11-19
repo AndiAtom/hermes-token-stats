@@ -1,4 +1,4 @@
-"""``/usage`` — token totals and cost from the token-stats known ledger.
+"""``/tokenstats`` — token totals and cost from the token-stats known ledger.
 
 Head-up CLI view for users who never open the desktop pane. Reads the
 ledger DB directly (``mode=ro``), so it needs no gateway route and no
@@ -48,7 +48,7 @@ LEDGER_BASE = os.path.expanduser(os.environ.get("LEDGER_BASE", "~/token-stats-le
 #   1. prices.json next to THIS file — generated from plugin.js by
 #      scripts/gen_prices_usage.py and shipped with the plugin. This is the
 #      only candidate that exists for a pure CLI install (no desktop plugin,
-#      no repo checkout), which is the audience /usage is FOR.
+#      no repo checkout), which is the audience /tokenstats is FOR.
 #   2. plugin.js parsed live — repo checkouts and machines with the desktop
 #      plugin installed, so a developer editing prices sees the change
 #      immediately without regenerating.
@@ -161,14 +161,14 @@ WINDOWS = {
     "all": ("all time", "all"),
 }
 
-HELP = """Usage: /usage [1d|5d|7d|30d|all] [models] [profile NAME]
+HELP = """Usage: /tokenstats [1d|5d|7d|30d|all] [models] [profile NAME]
 
-  /usage            token totals for the last 7 days (default)
-  /usage 1d         today only (since local midnight)
-  /usage 5d         this workweek (since Mon 00:00)
-  /usage 30d        this calendar month (since the 1st)
-  /usage models     per-model breakdown for the window
-  /usage profile X  read ledger profile X instead of 'default'
+  /tokenstats            token totals for the last 7 days (default)
+  /tokenstats 1d         today only (since local midnight)
+  /tokenstats 5d         this workweek (since Mon 00:00)
+  /tokenstats 30d        this calendar month (since the 1st)
+  /tokenstats models     per-model breakdown for the window
+  /tokenstats profile X  read ledger profile X instead of 'default'
 """
 
 
@@ -442,7 +442,7 @@ def _fmt_age(seconds: float) -> str:
 
 
 def _handle_usage(raw_args: str = "", **kwargs) -> str:
-    """Render the ``/usage`` block. Never raises: every failure becomes a line."""
+    """Render the ``/tokenstats`` block. Never raises: every failure becomes a line."""
     try:
         tokens = (raw_args or "").split()
         window = "7d"
@@ -475,7 +475,7 @@ def _handle_usage(raw_args: str = "", **kwargs) -> str:
 
 def register(ctx) -> None:
     ctx.register_command(
-        "usage",
+        "tokenstats",
         _handle_usage,
         description="Token totals and cost from the token-stats ledger",
         args_hint="[1d|5d|7d|30d|all] [models] [profile NAME]",

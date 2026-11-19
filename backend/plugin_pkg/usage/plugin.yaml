@@ -1,6 +1,6 @@
 name: usage
 version: 1.0.0
-description: "/usage slash command — token totals and cost from the token-stats known ledger (read-only)."
+description: "/tokenstats slash command — token totals and cost from the token-stats known ledger (read-only)."
 author: Thorballer
 kind: standalone
 platforms:

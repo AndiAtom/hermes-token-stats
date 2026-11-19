@@ -243,17 +243,17 @@ known-ledger backend). It renders as a dashboard page at `/token-stats`:
 No separate install: it deploys with the backend (`backend/install.sh`),
 then the dashboard serves it automatically.
 
-## CLI: the `/usage` command
+## CLI: the `/tokenstats` command
 
-For pure CLI users — no desktop app, no dashboard — `/usage` reports the
+For pure CLI users — no desktop app, no dashboard — `/tokenstats` reports the
 same numbers from the prompt:
 
 ```
-/usage                 last 7 days (default)
-/usage 1d              today          (also 5d, 7d, 30d, all)
-/usage models          per-model breakdown for the window
-/usage profile trading read another ledger profile
-/usage --help          usage text
+/tokenstats                 last 7 days (default)
+/tokenstats 1d              today          (also 5d, 7d, 30d, all)
+/tokenstats models          per-model breakdown for the window
+/tokenstats profile trading read another ledger profile
+/tokenstats --help          usage text
 ```
 
 Sample:
@@ -276,7 +276,7 @@ Token Stats — all time (profile: default)
   ledger heartbeat: 3m ago
 ```
 
-`/usage` is a **native Hermes plugin** (`backend/plugin_pkg/usage/`), not a
+`/tokenstats` is a **native Hermes plugin** (`backend/plugin_pkg/usage/`), not a
 desktop plugin: it opens `ledger.db` read-only and formats text, so it
 works in the CLI where there is no React host. It needs the ledger daemon
 running (installed by `install.sh`) — without it the command says so and
@@ -526,14 +526,14 @@ The gateway's `input` already **excludes** cached tokens
 **v1.1.0 (planned)** — first-class **Hermes CLI** support. The ledger daemon
 already records everything, but a pure CLI user (no desktop app, no headless
 pane) had no way to *see* their numbers without opening a dashboard. This
-adds a `/usage` slash command to the Hermes CLI so token stats are queryable
+adds a `/tokenstats` slash command to the Hermes CLI so token stats are queryable
 directly from the prompt:
 
 ```
-/usage                 token totals for the last 7 days (default)
-/usage 1d              today only (also: 5d, 30d, all)
-/usage models          per-model breakdown for the window
-/usage profile trading read another ledger profile
+/tokenstats                 token totals for the last 7 days (default)
+/tokenstats 1d              today only (also: 5d, 30d, all)
+/tokenstats models          per-model breakdown for the window
+/tokenstats profile trading read another ledger profile
 ```
 
 It ships as a **native Hermes plugin** (`backend/plugin_pkg/usage/`) that
@@ -541,7 +541,7 @@ reads `ledger.db` directly in `mode=ro` — no gateway route, no desktop
 app, and the same source the chip and pane read, so the numbers agree.
 Unpriced models render `—` and are excluded from the total (marked `≈`)
 rather than contributing a fabricated cost. See
-[*CLI: the `/usage` command*](#cli-the-usage-command).
+[*CLI: the `/tokenstats` command*](#cli-the-usage-command).
 
 **v1.2.0 (planned)** — first-class **Hermes WebApp** support (the
 browser-hosted desktop served by the gateway, Hermes ≥ v0.22.6). The pane
