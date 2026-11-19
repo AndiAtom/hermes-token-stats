@@ -359,8 +359,10 @@ touching `install.sh` or the plugin package.
   to the next login (the doctor reports this).
 - **Installer**: `ss`, `setsid` and `grep -P` are Linux-only. The dashboard
   restart path now branches on `uname -s`, using `lsof` for the port probe
-  and a plain `nohup` launch on Darwin. The rest of `install.sh` is
-  POSIX-compatible and passes `bash -n` under macOS's stock bash 3.2.
+  and a plain `nohup` launch on Darwin. Verified with `bash -n` under
+  macOS's stock bash 3.2 and no bash-4-only constructs (`mapfile`,
+  `${x,,}`, `local -n`). One GNU-ism remains on the interpreter-probe path
+  (`sort -V`), which degrades gracefully to `command -v python3` on macOS.
 
 Remaining gap: **CI** still runs the ledger unit tests on Linux only. Add a
 `macos-latest` job to verify the delta engine on Darwin per release — no

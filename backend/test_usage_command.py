@@ -4,10 +4,10 @@ Builds a throwaway ledger DB, points LEDGER_BASE at it, and drives the
 command handler end to end. No network, no Hermes core imports.
 """
 import importlib.util
-import json
 import os
 import sqlite3
 import time
+import uuid
 
 import pytest
 
@@ -18,11 +18,17 @@ SCHEMA = os.path.join(HERE, "ledger", "schema.sql")
 
 @pytest.fixture()
 def usage(tmp_path, monkeypatch):
-    spec = importlib.util.spec_from_file_location("usage_plugin_test", USAGE_PY)
+    # Unique module name per test: _PRICE_CACHE is module-global, and reusing
+    # one fixed name lets a stale sys.modules entry mask a pricing regression.
+    name = "usage_plugin_test_" + uuid.uuid4().hex
+    spec = importlib.util.spec_from_file_location(name, USAGE_PY)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
+    mod._PRICE_CACHE = None
     monkeypatch.setattr(mod, "LEDGER_BASE", str(tmp_path))
     monkeypatch.setenv("LEDGER_BASE", str(tmp_path))
+    # Isolate from the host state.db so window tests are deterministic.
+    monkeypatch.setattr(mod, "_session_activity", lambda: {})
     return mod
 
 
@@ -130,11 +136,19 @@ def test_zero_tokens_free_model_is_zero(usage, tmp_path):
     assert "$0.00" in out
 
 
-def test_window_filters_out_old_rows(usage, tmp_path):
-    old = time.time() - 40 * 86400
+def test_window_filters_on_first_seen_not_last_poll(usage, tmp_path):
+    """A session that STARTED outside the window must be excluded, even if
+    last_poll (bumped by the daemon on delta) sits inside it.
+
+    This is the B1 regression: windowing on last_poll kept weeks-old sessions
+    in a 7-day view, carrying their whole lifetime counters.
+    """
+    old_start = time.time() - 40 * 86400
     _make_ledger(str(tmp_path), [
+        # started 40d ago, last_poll 1h ago (a delta was seen recently)
         {"sid": "old", "model": "mistral-large-latest", "in": 5, "cached": 0,
-         "out": 0, "calls": 1, "last_poll": old},
+         "out": 0, "calls": 1, "first_seen": old_start,
+         "last_poll": time.time() - 3600},
         {"sid": "new", "model": "mistral-large-latest", "in": 7, "cached": 0,
          "out": 0, "calls": 1},
     ])
@@ -142,6 +156,19 @@ def test_window_filters_out_old_rows(usage, tmp_path):
     assert "sessions     1" in recent
     everything = usage._handle_usage("all")
     assert "sessions     2" in everything
+
+
+def test_window_uses_state_db_activity_when_available(usage, tmp_path, monkeypatch):
+    """state.db last_activity_at is the authoritative signal, as in the pane."""
+    old = time.time() - 40 * 86400
+    _make_ledger(str(tmp_path), [
+        {"sid": "s", "model": "mistral-large-latest", "in": 5, "cached": 0,
+         "out": 0, "calls": 1, "first_seen": old},
+    ])
+    # first_seen says 40d ago, but state.db says it was active a minute ago.
+    monkeypatch.setattr(usage, "_session_activity",
+                        lambda: {"s": time.time() - 60})
+    assert "sessions     1" in usage._handle_usage("7d")
 
 
 def test_models_breakdown_lists_each_model(usage, tmp_path):
@@ -205,13 +232,16 @@ def test_corrupt_ledger_does_not_raise(usage, tmp_path):
     assert out.startswith("Token Stats")
 
 
-def test_stale_heartbeat_warns(usage, tmp_path):
+def test_stale_heartbeat_reports_long_age(usage, tmp_path):
     _make_ledger(str(tmp_path), [
         {"sid": "s1", "model": "mistral-large-latest",
          "in": 1, "cached": 0, "out": 0, "calls": 1},
     ], heartbeat_age=9999)
     out = usage._handle_usage("")
     assert "heartbeat" in out.lower()
+    # Format the age too: "heartbeat" alone is true on every render, so the
+    # old assertion could not fail on a fresh heartbeat.
+    assert "2.8h" in out, out
 
 
 def test_price_prefix_match_dates(usage):
@@ -239,13 +269,19 @@ def test_prices_come_from_plugin_js_not_a_copy(usage):
 
 
 def test_provider_scoped_price_wins_over_model_only(usage):
+    """A model priced differently per provider must resolve per provider."""
     prices = usage._load_prices()
     sub = prices["provider"].get("openrouter") or {}
-    model = next(iter(sub))
-    # Provider match is used when the provider key matches exactly.
+    assert sub, "no openrouter price table"
+    # Pick a model that ALSO exists in the model-only table, so the two
+    # branches are distinguishable (the old test picked the first key, which
+    # had no model-only twin, making the second assertion None == None).
+    overlapping = [m for m in sub if m in prices["model"]]
+    model = overlapping[0]
     assert usage._price_for(model, "openrouter") == sub[model]
-    # An unknown provider falls through to the model-only table.
-    assert usage._price_for(model, "some-other-provider") == prices["model"].get(model)
+    assert usage._price_for(model, "some-other-provider") == prices["model"][model]
+    # Nous is aliased to the OpenRouter catalog, as the client does.
+    assert usage._price_for(model, "nous") == sub[model]
 
 
 def test_cost_never_raises_without_price_table(usage, monkeypatch):
@@ -254,12 +290,80 @@ def test_cost_never_raises_without_price_table(usage, monkeypatch):
     assert usage._cost(1000, 0, 0, "anything") is None
 
 
-def test_cutoff_today_is_midnight(usage):
+def test_cutoff_today_is_midnight_today(usage):
     import time as t
-    cutoff = usage._cutoff("1d")
-    assert t.localtime(cutoff).tm_hour == 0
-    assert t.localtime(cutoff).tm_min == 0
+    cutoff = t.localtime(usage._cutoff("1d"))
+    now = t.localtime()
+    assert (cutoff.tm_hour, cutoff.tm_min, cutoff.tm_sec) == (0, 0, 0)
+    # And it is TODAY's midnight, not some other day's.
+    assert (cutoff.tm_year, cutoff.tm_yday) == (now.tm_year, now.tm_yday)
+
+
+def test_cutoff_workweek_is_monday(usage):
+    import datetime as dt
+    start = dt.datetime.fromtimestamp(usage._cutoff("5d"))
+    assert start.weekday() == 0, "workweek must start on Monday"
+    assert (start.hour, start.minute, start.second) == (0, 0, 0)
+
+
+def test_cutoff_month_is_the_first(usage):
+    import datetime as dt
+    start = dt.datetime.fromtimestamp(usage._cutoff("30d"))
+    assert start.day == 1
+    assert (start.hour, start.minute) == (0, 0)
+
+
+def test_5d_is_not_the_same_as_7d(usage):
+    """5d is a calendar workweek, 7d is rolling — they must differ."""
+    assert usage._cutoff("5d") != usage._cutoff("7d")
 
 
 def test_cutoff_all_is_zero(usage):
     assert usage._cutoff("all") == 0.0
+
+
+def test_prices_work_from_shipped_json_without_plugin_js(tmp_path, monkeypatch):
+    """B2 regression: a pure CLI install has no plugin.js and no desktop
+    plugin. The shipped prices.json must carry the table by itself.
+
+    Copies the plugin to a bare directory (no repo, no desktop plugin) and
+    asserts a real price still resolves.
+    """
+    import shutil
+    dest = tmp_path / "installed"
+    dest.mkdir()
+    plugin_dir = os.path.join(HERE, "plugin_pkg", "usage")
+    for name in ("__init__.py", "prices.json", "plugin.yaml"):
+        shutil.copy(os.path.join(plugin_dir, name), dest / name)
+
+    spec = importlib.util.spec_from_file_location(
+        "usage_installed_" + uuid.uuid4().hex, str(dest / "__init__.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    # No repo plugin.js, no desktop plugin: this is the pure-CLI case.
+    mod._PLUGIN_JS_CANDIDATES = ("/nonexistent/plugin.js",)
+    mod._PRICE_CACHE = None
+
+    prices = mod._load_prices()
+    assert prices["model"], "shipped prices.json did not load"
+    assert mod._price_for("mistral-large-latest") == (0.5, 0.05, 1.5)
+    assert mod._price_for("mistral-large-latest", "nous") == (0.5, 0.05, 1.5)
+
+
+def test_shipped_prices_json_matches_plugin_js(usage):
+    """Drift guard: prices.json must equal what plugin.js says.
+
+    Regenerate with scripts/gen_prices_usage.py when this fails.
+    """
+    import json
+    here = os.path.dirname(os.path.abspath(__file__))
+    js_path = os.path.join(here, "..", "plugin.js")
+    if not os.path.exists(js_path):
+        pytest.skip("plugin.js not present (installed layout)")
+    with open(os.path.join(here, "plugin_pkg", "usage", "prices.json")) as fh:
+        shipped = json.load(fh)
+    with open(js_path, encoding="utf-8") as fh:
+        src = fh.read()
+    live = usage._js_prices(src, "PRICES")
+    assert {k: list(v) for k, v in live.items()} == shipped["model"], (
+        "prices.json is stale vs plugin.js — run scripts/gen_prices_usage.py")

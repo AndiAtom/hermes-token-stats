@@ -269,8 +269,9 @@ Token Stats — all time (profile: default)
   api calls    2411
   cost         ≈$4.09
 ──────────────────────────────────────────────
-  deepseek-v4-1-flash-1017    163.93M   1892    $4.09
-  gpt-6.1-sol                  31.17M    191        —
+  model                      tokens calls     cost
+  deepseek-v4-1-flash-1017  163.93M  1892    $4.09
+  gpt-6.1-sol                31.17M   191        —
   ≈ unpriced models excluded from the cost total
   ledger heartbeat: 3m ago
 ```
@@ -281,17 +282,30 @@ works in the CLI where there is no React host. It needs the ledger daemon
 running (installed by `install.sh`) — without it the command says so and
 points at `install.sh`.
 
-Because a CLI command has no focused session, the default is an **aggregate
-over the window** rather than the chip's per-session reading.
+Windows are calendar-based like the pane's presets — `1d` since local
+midnight, `5d` this workweek (Mon 00:00), `30d` this calendar month, plus
+`all`; `7d` (the default) is the one rolling preset. Attribution uses real
+session activity (`last_activity_at` from `state.db`, falling back to the
+ledger's `first_seen`) — **not** the ledger's `last_poll`, which the daemon
+only advances when a counter moves, so for a quiet session it is neither
+last activity nor last poll.
 
-**Prices are read from `plugin.js`**, not duplicated. The CLI parses the
-same `PRICES` / `PRICES_OPENROUTER` tables the chip and pane use, so a cost
-reported by `/usage` is the cost the UI reports for the same ledger — no
-second copy to drift. Resolution order matches the clients exactly
-(`PRICES_PROVIDER[provider][model]` → `PRICES[model]` → `—`). Unpriced
-models print `—` and are left out of the total (`≈` prefix), matching the
-clients' no-fabricated-prices rule. If `plugin.js` cannot be located the
-command still works — it simply shows `—` for cost instead of guessing.
+**Prices** ship as `prices.json` next to the plugin, **generated from
+`plugin.js`** by `scripts/gen_prices_usage.py` — the same `PRICES` /
+`PRICES_OPENROUTER` tables the chip and pane use, so there is no second
+copy to drift. Regenerate after changing a price (`python3
+scripts/gen_prices_usage.py`); a test fails if the two disagree.
+Resolution order matches the clients (`PRICES_PROVIDER[provider][model]` →
+`PRICES[model]` → `—`), and Nous is aliased to the OpenRouter catalog the
+way `plugin.js` does. Unpriced models print `—` and are excluded from the
+total (`≈` prefix) rather than contributing a fabricated number.
+
+Costs are **USD list price**. The pane's user overrides (`prices.json`
+overrides / the backend `/prices` route), the EU ×1.1 region factor and the
+€/$ display toggle are UI-only and are *not* applied here, so a user on
+default EUR display will see a number that differs by the conversion rate.
+If the price table cannot be found at all, cost shows `—` instead of a
+guess.
 
 Install:
 

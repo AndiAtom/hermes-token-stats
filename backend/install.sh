@@ -319,6 +319,20 @@ if diff -r --exclude=__pycache__ "$HERE/plugin_pkg/usage" "$HERMES_HOME/plugins/
 else
   die "usage plugin copy failed the diff check"
 fi
+# /usage reads its price table from prices.json in that directory (generated
+# from plugin.js by scripts/gen_prices_usage.py). Without it every model shows
+# "—" for cost — exactly the pure-CLI case this plugin exists for — so a
+# missing table is fatal rather than a warning.
+[ -f "$HERMES_HOME/plugins/usage/prices.json" ] \
+  || die "prices.json missing from the deployed usage plugin (stale clone? run scripts/gen_prices_usage.py)"
+# Warn when the shipped table has drifted from the desktop plugin it mirrors.
+if [ -f "$HERE/plugin.js" ] && [ -f "$HERE/scripts/gen_prices_usage.py" ]; then
+  if "$PY" "$HERE/scripts/gen_prices_usage.py" --check >/dev/null 2>&1; then
+    pass "usage price table matches plugin.js"
+  else
+    warn "usage prices.json is out of date vs plugin.js — /usage costs may differ from the pane. Regenerate: python3 scripts/gen_prices_usage.py"
+  fi
+fi
 
 # ── 2. Enable the plugin in config.yaml (surgical text insert) ────────
 # NO YAML-library round-trip: ruamel reflows the ENTIRE file (indent flips,
