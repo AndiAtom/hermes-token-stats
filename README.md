@@ -249,7 +249,7 @@ Since Hermes v0.22.6 the gateway can also serve the **WebApp** — the full
 desktop bundle in the browser (gateway port 9120), a third surface next to
 the packaged desktop app and the web dashboard. The desktop plugin runs
 there **as-is**: pane and statusbar chip render and work in the WebApp
-already (rudimentary — first-class support is planned for v1.1, see
+already (rudimentary — first-class support is planned for v1.2, see
 roadmap).
 
 Install via the installer's client-only mode (on the Hermes host):
@@ -453,10 +453,18 @@ The gateway's `input` already **excludes** cached tokens
   `--client-only` (desktop plugin file only). See
   [*Install*](#install).
 
-**v1.1.0 (planned)** — first-class **Hermes WebApp** support (the
+**v1.1.0 (planned)** — first-class **Hermes CLI** support. The ledger daemon
+already records everything, but a pure CLI user (no desktop app, no
+headless pane) has no way to *see* their numbers without opening a
+dashboard. v1.1 adds `/` slash commands in the Hermes CLI so token stats
+are queryable directly from the prompt — e.g. session totals, per-model
+breakdowns and cost for the current day/week/month — served from the
+same plugin backend (no separate data path).
+
+**v1.2.0 (planned)** — first-class **Hermes WebApp** support (the
 browser-hosted desktop served by the gateway, Hermes ≥ v0.22.6). The pane
 and chip already render and work in the WebApp as-is (see *Hermes WebApp
-pane* above); v1.1 turns that into first-class support:
+pane* above); v1.2 turns that into first-class support:
 
 - **Mobile interface** — the WebApp is the natural surface for phones;
   the pane needs responsive treatment for small screens (the fixed 380px
@@ -464,10 +472,10 @@ pane* above); v1.1 turns that into first-class support:
 - **Documented, smooth install path** — today the WebApp pane is
   installed by the installer's client-only mode (plugin.js to
   `~/.hermes/desktop-plugins/token-stats/` on the Hermes host) plus a
-  WebApp reload; v1.1 documents this path properly and makes it a
+  WebApp reload; v1.2 documents this path properly and makes it a
   one-step flow
 
-**v1.2.0 (planned)** — scope: consumer tracking + the native "hermes proxy"
+**v1.3.0 (planned)** — scope: consumer tracking + the native "hermes proxy"
 
 - **hermes-proxy integration:** `hermes proxy` (local OpenAI-compatible
   forwarder to OAuth providers — external apps point at it with any bearer
