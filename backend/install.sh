@@ -474,15 +474,33 @@ fi
 # Backup: the token-stats block above only writes $CONFIG.bak-token-stats when
 # it actually edits, so on a re-run (token-stats already enabled) there may be
 # no backup at all. Take one here when the first edit would not have.
+# True only when the PLUGINS block's enabled key is flow style. A bare
+# `grep enabled:` would also match unrelated blocks (`other: enabled: [...]`),
+# and the flow insert would then rewrite the wrong list.
+plugins_flow_enabled() {
+  "$PY" - "$CONFIG" <<'PYCHK'
+import re, sys
+lines = open(sys.argv[1], newline="").read().splitlines()
+in_plugins = False
+for s in lines:
+    if not s.startswith((" ", "\t")):
+        in_plugins = (s.strip() == "plugins:")
+        continue
+    if in_plugins and re.match(r"^\s+enabled:\s*\[", s):
+        sys.exit(0)
+sys.exit(1)
+PYCHK
+}
+
 if [ ! -f "$CONFIG.bak-token-stats" ]; then
   cp "$CONFIG" "$CONFIG.bak-token-stats"
 fi
 if grep -qE '^\s*-\s*["'"'"']?usage["'"'"']?\s*$' "$CONFIG"; then
   say "plugins.enabled already contains usage"
 else
-  if grep -qE '^\s*enabled:\s*\[' "$CONFIG"; then
+  if plugins_flow_enabled; then
     # Flow style (`enabled: [a, b]`) has no `- item` lines to append after.
-    # Rewrite the flow list in place rather than half-editing it.
+    # Rewrite the flow list in place, anchored to the plugins block.
     "$PY" - "$CONFIG" <<'PYEOF3'
 import re, sys
 
@@ -490,22 +508,31 @@ path = sys.argv[1]
 raw = open(path, newline="").read()
 eol = "\r\n" if "\r\n" in raw else "\n"
 
-# Locate a top-level `plugins:` block, then a flow-style `enabled: [...]`.
 lines = raw.splitlines(keepends=True)
+in_plugins = False
 for i, line in enumerate(lines):
-    if re.match(r"^(\s+)enabled:\s*\[(.*)\]\s*$", line.rstrip("\r\n")):
-        m = re.match(r"^(\s+)enabled:\s*\[(.*)\]\s*$", line.rstrip("\r\n"))
-        indent, body = m.group(1), m.group(2)
-        items = [x.strip().strip("'\"") for x in body.split(",") if x.strip()]
-        if "usage" in items:
-            sys.exit(0)
-        items.append("usage")
-        lines[i] = f"{indent}enabled: [{', '.join(items)}]" + eol
-        open(path, "w", newline="").writelines(lines)
-        print("[ok] plugins.enabled += usage (flow style)")
+    s = line.rstrip("\r\n")
+    # Only consider the top-level plugins: block — an `enabled: [...]`
+    # under any other key must never be touched.
+    if not s.startswith((" ", "\t")):
+        in_plugins = (s.strip() == "plugins:")
+        continue
+    if not in_plugins:
+        continue
+    m = re.match(r"^(\s+)enabled:\s*\[(.*)\]\s*$", s)
+    if not m:
+        continue
+    indent, body = m.group(1), m.group(2)
+    items = [x.strip().strip("'\"") for x in body.split(",") if x.strip()]
+    if "usage" in items:
         sys.exit(0)
+    items.append("usage")
+    lines[i] = f"{indent}enabled: [{', '.join(items)}]" + eol
+    open(path, "w", newline="").writelines(lines)
+    print("[ok] plugins.enabled += usage (flow style)")
+    sys.exit(0)
 
-sys.exit("no flow-style enabled: list found")
+sys.exit("no flow-style enabled: list under plugins:")
 PYEOF3
     if [ "$?" = "0" ]; then
       if [ "${RUAMEL_OK:-0}" = "1" ]; then
