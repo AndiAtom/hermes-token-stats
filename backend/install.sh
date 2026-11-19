@@ -466,6 +466,66 @@ PYEOF
   fi
 fi
 
+# The /usage plugin needs its own plugins.enabled entry — deploying the
+# directory alone leaves it unloaded, so /usage would not register. It is a
+# separate plugin ID from token-stats (it needs no ctx.rest namespace), so it
+# gets its own insert. The backup from the block above already snapshotted
+# the pre-install config, so one restore covers both edits.
+if grep -qE '^\s*-\s*["'"'"']?usage["'"'"']?\s*$' "$CONFIG"; then
+  say "plugins.enabled already contains usage"
+else
+  if grep -qE '^\s*enabled:' "$CONFIG"; then
+    "$PY" - "$CONFIG" <<'PYEOF2'
+import re, sys
+
+path = sys.argv[1]
+raw = open(path, newline="").read()
+eol = "\r\n" if "\r\n" in raw else "\n"
+lines = raw.splitlines(keepends=True)
+
+out, in_plugins, in_enabled, last_item = [], False, False, None
+for line in lines:
+    out.append(line)
+    s = line.rstrip("\r\n")
+    # A top-level `plugins:` block.
+    if not s.startswith((" ", "\t")) and s.strip() == "plugins:":
+        in_plugins = True
+        continue
+    # Any other top-level key ends the block.
+    if in_plugins and not s.startswith((" ", "\t")) and s.strip():
+        in_plugins = False
+        in_enabled = False
+        continue
+    if in_plugins and re.match(r"^\s+enabled:", s):
+        in_enabled = True
+        continue
+    if in_enabled and re.match(r"^\s+-\s+", s):
+        # Remember where the LAST list item ends, so the new entry is
+        # appended at the end of the list rather than spliced into it.
+        last_item = len(out)
+
+if last_item is None:
+    sys.exit("no plugins.enabled list items found to append after")
+
+indent = re.match(r"^(\s+)-", lines[last_item - 1]).group(1)
+out.insert(last_item, indent + "- usage" + eol)
+
+open(path, "w", newline="").writelines(out)
+print("[ok] plugins.enabled += usage")
+PYEOF2
+    if [ "$?" = "0" ]; then
+      if [ "${RUAMEL_OK:-0}" = "1" ]; then
+        "$PY" -c "from ruamel.yaml import YAML; d = YAML().load(open('$CONFIG')); assert 'usage' in d['plugins']['enabled'], 'usage entry missing'; print('[ok] config.yaml parses, usage enabled')" \
+          || die "config.yaml edit failed validation for usage — restore from $CONFIG.bak-token-stats"
+      fi
+    else
+      warn "could not append 'usage' to plugins.enabled — add '    - usage' by hand to enable /usage"
+    fi
+  else
+    warn "no plugins.enabled section found — add '    - usage' under plugins: by hand to enable /usage"
+  fi
+fi
+
 # ── 3. Known-ledger daemon (systemd on Linux, launchd on macOS) ──────
 if [ "$DO_DAEMON" = "1" ]; then
   LEDGER_BASE="${LEDGER_BASE:-$HOME/token-stats-ledger}"
