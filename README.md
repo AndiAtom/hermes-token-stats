@@ -524,7 +524,7 @@ The gateway's `input` already **excludes** cached tokens
   `--client-only` (desktop plugin file only). See
   [*Install*](#install).
 
-**v1.1.0 (released)** — first-class **Hermes CLI** support. The ledger daemon
+**v1.1.0** — first-class **Hermes CLI** support. The ledger daemon
 already records everything, but a pure CLI user (no desktop app, no headless
 pane) had no way to *see* their numbers without opening a dashboard. This
 adds a `/tokenstats` slash command to the Hermes CLI so token stats are queryable
@@ -542,7 +542,9 @@ It ships as a **native Hermes plugin** (`backend/plugin_pkg/usage/`) that
 reads `ledger.db` directly in `mode=ro` — no gateway route, no desktop
 app, and the same source the chip and pane read, so the numbers agree.
 Unpriced models render `—` and are excluded from the total (marked `≈`)
-rather than contributing a fabricated cost. See
+rather than contributing a fabricated cost. The session view (`v1.1.1`)
+composes with all of the above — `/tokenstats session profile trading`
+reads the current session from the trading profile's ledger. See
 [*CLI: the `/tokenstats` command*](#cli-the-usage-command).
 
 **v1.2.0 (planned)** — first-class **Hermes WebApp** support (the

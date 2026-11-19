@@ -1,5 +1,5 @@
 name: token-stats
-version: 1.1.0
+version: 1.1.1
 description: >
     Known-Ledger backend for the token-stats desktop plugin. Serves monotonic
     (compression-safe) token counters from a per-profile ledger DB that is
