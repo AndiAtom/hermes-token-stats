@@ -252,6 +252,7 @@ same numbers from the prompt:
 /tokenstats                 last 7 days (default)
 /tokenstats 1d              today          (also 5d, 7d, 30d, all)
 /tokenstats models          per-model breakdown for the window
+/tokenstats session         the session you are in — the CLI twin of the chip
 /tokenstats profile trading read another ledger profile
 /tokenstats --help          usage text
 ```
@@ -531,8 +532,9 @@ directly from the prompt:
 
 ```
 /tokenstats                 token totals for the last 7 days (default)
-/tokenstats 1d              today only (also: 5d, 30d, all)
+/tokenstats 1d              today only (also: 5d, 7d, 30d, all)
 /tokenstats models          per-model breakdown for the window
+/tokenstats session         the current session only (the CLI twin of the chip)
 /tokenstats profile trading read another ledger profile
 ```
 

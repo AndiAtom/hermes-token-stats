@@ -367,3 +367,96 @@ def test_shipped_prices_json_matches_plugin_js(usage):
     live = usage._js_prices(src, "PRICES")
     assert {k: list(v) for k, v in live.items()} == shipped["model"], (
         "prices.json is stale vs plugin.js — run scripts/gen_prices_usage.py")
+
+
+# ── /tokenstats session ──────────────────────────────────────────────
+
+def test_session_view_shows_this_sessions_rows(usage, tmp_path):
+    """The session keyword filters the ledger to the calling session."""
+    _make_ledger(str(tmp_path), [
+        {"sid": "mine", "model": "mistral-large-latest",
+         "in": 1_000_000, "cached": 0, "out": 0, "calls": 1},
+        {"sid": "other", "model": "mistral-large-latest",
+         "in": 9_000_000, "cached": 0, "out": 0, "calls": 9},
+    ])
+    out = usage._handle_usage("session", session_id="mine")
+    assert "this session" in out
+    assert "$0.50" in out          # 1M × $0.50/M — the OTHER row's $4.50 absent
+    assert "$4.50" not in out
+    assert "api calls    1" in out  # only this session's calls
+    assert "mistral-large-latest" in out  # model row always shown
+
+
+def test_session_view_multi_model_session(usage, tmp_path):
+    _make_ledger(str(tmp_path), [
+        {"sid": "s", "model": "mistral-large-latest",
+         "in": 1_000_000, "cached": 0, "out": 0, "calls": 1},
+        {"sid": "s", "model": "codestral-latest",
+         "in": 1_000_000, "cached": 0, "out": 0, "calls": 2},
+    ])
+    out = usage._handle_usage("session", session_id="s")
+    assert "mistral-large-latest" in out and "codestral-latest" in out
+    assert "$0.30" in out          # codestral 1M in = $0.30
+
+
+def test_session_view_unpriced_marked_approx(usage, tmp_path):
+    _make_ledger(str(tmp_path), [
+        {"sid": "s", "model": "mystery", "in": 1, "cached": 0, "out": 0, "calls": 1},
+    ])
+    out = usage._handle_usage("session", session_id="s")
+    assert "no ledger rows" not in out
+    assert "≈" in out
+    assert "unpriced" in out
+
+
+def test_session_view_unknown_session_explains(usage, tmp_path):
+    _make_ledger(str(tmp_path), [])
+    out = usage._handle_usage("session", session_id="never-seen")
+    assert "no ledger rows" in out
+    assert "daemon polls" in out  # the ~30s polling hint
+
+
+def test_session_view_without_session_context(usage, tmp_path):
+    """_handler called with no session_id (e.g. a surface without context):
+    explain instead of rendering an empty block."""
+    _make_ledger(str(tmp_path), [])
+    out = usage._handle_usage("session")
+    assert "no session context" in out
+
+
+def test_session_view_core_dispatch_wiring(usage, tmp_path):
+    """Core's invoke_plugin_command passes session_id via **kwargs — the exact
+    call path a real /tokenstats dispatch takes. First positional param gets
+    raw_args, declared keywords get the context."""
+    _make_ledger(str(tmp_path), [
+        {"sid": "dispatched", "model": "mistral-large-latest",
+         "in": 2_000_000, "cached": 0, "out": 0, "calls": 2},
+    ])
+    # Use core's real dispatcher if importable; else mimic its contract.
+    try:
+        from hermes_cli.plugin_command_dispatch import invoke_plugin_command
+    except ImportError:
+        invoke_plugin_command = None
+    if invoke_plugin_command is None:
+        out = usage._handle_usage("session", session_id="dispatched")
+    else:
+        out = invoke_plugin_command(
+            usage._handle_usage, "session",
+            source=None, session_key="dispatched", session_id="dispatched",
+            platform="local")
+    assert "this session" in out
+    assert "$1.00" in out  # 2M in × $0.50/M
+
+
+def test_session_composes_with_profile(usage, tmp_path):
+    """session + profile X reads that profile's ledger for the session."""
+    _make_ledger(str(tmp_path), [])
+    other = os.path.join(str(tmp_path), "trading")
+    os.makedirs(other, exist_ok=True)
+    conn = sqlite3.connect(os.path.join(other, "ledger.db"))
+    with open(SCHEMA) as f:
+        conn.executescript(f.read())
+    conn.close()
+    monkeypatch_hint = usage._handle_usage("session profile trading",
+                                          session_id="x")
+    assert "profile: trading" in monkeypatch_hint

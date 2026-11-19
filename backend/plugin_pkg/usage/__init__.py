@@ -161,13 +161,14 @@ WINDOWS = {
     "all": ("all time", "all"),
 }
 
-HELP = """Usage: /tokenstats [1d|5d|7d|30d|all] [models] [profile NAME]
+HELP = """Usage: /tokenstats [1d|5d|7d|30d|all] [models] [session] [profile NAME]
 
   /tokenstats            token totals for the last 7 days (default)
   /tokenstats 1d         today only (since local midnight)
   /tokenstats 5d         this workweek (since Mon 00:00)
   /tokenstats 30d        this calendar month (since the 1st)
   /tokenstats models     per-model breakdown for the window
+  /tokenstats session    THIS session only (the CLI session you are in)
   /tokenstats profile X  read ledger profile X instead of 'default'
 """
 
@@ -441,12 +442,118 @@ def _fmt_age(seconds: float) -> str:
     return f"{seconds / 3600:.1f}h"
 
 
+def _render_session(session_id: str, want_models: bool, profile: str) -> str:
+    """Per-session view for ``/tokenstats session`` — the CLI twin of the chip.
+
+    Same ledger, same price resolution as the aggregate view, restricted to
+    the rows of ONE session (the one the command runs in, injected by core's
+    plugin_command_dispatch as the ``session_id`` context keyword).
+    """
+    if not session_id:
+        return (
+            "Token Stats: no session context on this surface —\n"
+            "  /tokenstats session needs the session it is typed in.\n"
+            "  Aggregate windows work everywhere: try /tokenstats 7d"
+        )
+    path = _ledger_path(profile)
+    if not os.path.exists(path):
+        others = _profiles()
+        hint = f"\n  known profiles: {', '.join(others)}" if others else ""
+        return (
+            f"Token Stats: no ledger for profile '{profile}'.\n"
+            f"  expected: {path}{hint}\n"
+            "  install the ledger daemon first (backend/install.sh), or set LEDGER_BASE."
+        )
+    conn = _connect(path)
+    if conn is None:
+        return f"Token Stats: ledger at {path} is unreadable (permissions?)."
+    try:
+        all_rows = _rows(conn)
+        age = _heartbeat_age(conn)
+    except sqlite3.Error as exc:
+        return f"Token Stats: ledger query failed ({exc})."
+    finally:
+        conn.close()
+
+    rows = [r for r in all_rows if r["session_id"] == session_id]
+    short = session_id[:12] + "…" if len(session_id) > 12 else session_id
+    lines = [f"Token Stats — this session ({short}, profile: {profile})",
+             "─" * 46]
+
+    if not rows:
+        lines.append("  no ledger rows for this session yet")
+        lines.append("  (the daemon polls every ~30s — first tokens can take a minute)")
+        if age is not None:
+            lines.append(f"  ledger heartbeat: {_fmt_age(age)} ago")
+        return "\n".join(lines)
+
+    total_in = sum(r["known_in"] or 0 for r in rows)
+    total_cached = sum(r["known_cached"] or 0 for r in rows)
+    total_out = sum(r["known_out"] or 0 for r in rows)
+    total_calls = sum(r["known_calls"] or 0 for r in rows)
+
+    # Same (model, provider) grouping and price resolution as the aggregate.
+    cost_total = 0.0
+    unpriced = False
+    groups: dict[tuple[str, str], list] = {}
+    for r in rows:
+        key = (r["model"], r["billing_provider"] or "")
+        acc = groups.setdefault(key, [0, 0, 0, 0])
+        acc[0] += r["known_in"] or 0
+        acc[1] += r["known_cached"] or 0
+        acc[2] += r["known_out"] or 0
+        acc[3] += r["known_calls"] or 0
+    for (model, provider), (i, ca, o, _calls) in groups.items():
+        c = _cost(i, ca, o, model, provider)
+        if c is None:
+            unpriced = True
+        else:
+            cost_total += c
+
+    prompt = total_in + total_cached
+    hit = (total_cached / prompt * 100) if prompt else 0.0
+
+    lines.append(f"  {'input':<12} {_fmt_int(total_in)}")
+    lines.append(f"  {'cached':<12} {_fmt_int(total_cached)}  ({hit:.1f}% hit)")
+    lines.append(f"  {'output':<12} {_fmt_int(total_out)}")
+    lines.append(f"  {'tokens':<12} {_fmt_int(prompt + total_out)}")
+    lines.append(f"  {'api calls':<12} {total_calls}")
+    approx = "≈" if unpriced else ""
+    lines.append(f"  {'cost':<12} {approx}${cost_total:.2f}")
+
+    # Always show the model breakdown for a session — a session is usually
+    # single-model, and the cost claim is only checkable with the row visible.
+    lines.append("─" * 46)
+    lines.append(f"  {'model':<24} {'tokens':>8} {'calls':>5} {'cost':>8}")
+    for (model, provider) in sorted(
+        groups, key=lambda k: -(groups[k][0] + groups[k][1] + groups[k][2])
+    ):
+        i, ca, o, calls = groups[(model, provider)]
+        c = _cost(i, ca, o, model, provider)
+        cost = f"${c:.2f}" if c is not None else "—"
+        lines.append(
+            f"  {model[:24]:<24} {_fmt_int(i + ca + o):>8} {calls:>5} {cost:>8}"
+        )
+    if unpriced:
+        lines.append("  ≈ unpriced models excluded from the cost total")
+    if age is not None:
+        lines.append(f"  ledger heartbeat: {_fmt_age(age)} ago")
+    return "\n".join(lines)
+
+
 def _handle_usage(raw_args: str = "", **kwargs) -> str:
-    """Render the ``/tokenstats`` block. Never raises: every failure becomes a line."""
+    """Render the ``/tokenstats`` block. Never raises: every failure becomes a line.
+
+    Core's plugin_command_dispatch passes ``session_id`` (plus ``source``,
+    ``session_key``, ``platform``) as context keywords when the handler declares
+    them — either explicitly or via ``**kwargs`` — so the session view works on
+    every surface (TUI, gateway, CLI) without any plugin-side plumbing.
+    """
     try:
         tokens = (raw_args or "").split()
         window = "7d"
         want_models = False
+        want_session = False
         profile = "default"
 
         i = 0
@@ -458,6 +565,8 @@ def _handle_usage(raw_args: str = "", **kwargs) -> str:
                 window = tok
             elif tok in {"models", "all-models", "-m"}:
                 want_models = True
+            elif tok == "session":
+                want_session = True
             elif tok == "profile":
                 if i + 1 >= len(tokens):
                     return "Token Stats: 'profile' needs a name.\n\n" + HELP
@@ -467,6 +576,9 @@ def _handle_usage(raw_args: str = "", **kwargs) -> str:
                 return f"Token Stats: unknown argument '{tokens[i]}'.\n\n" + HELP
             i += 1
 
+        if want_session:
+            sid = str(kwargs.get("session_id") or "")
+            return _render_session(sid, want_models, profile)
         return _render(window, want_models, profile)
     except Exception as exc:  # noqa: BLE001 — a slash command must never raise
         logger.debug("usage: handler failed", exc_info=True)
@@ -478,5 +590,5 @@ def register(ctx) -> None:
         "tokenstats",
         _handle_usage,
         description="Token totals and cost from the token-stats ledger",
-        args_hint="[1d|5d|7d|30d|all] [models] [profile NAME]",
+        args_hint="[1d|5d|7d|30d|all|session] [models] [profile NAME]",
     )
