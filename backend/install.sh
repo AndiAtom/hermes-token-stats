@@ -469,12 +469,53 @@ fi
 # The /usage plugin needs its own plugins.enabled entry — deploying the
 # directory alone leaves it unloaded, so /usage would not register. It is a
 # separate plugin ID from token-stats (it needs no ctx.rest namespace), so it
-# gets its own insert. The backup from the block above already snapshotted
-# the pre-install config, so one restore covers both edits.
+# gets its own insert.
+#
+# Backup: the token-stats block above only writes $CONFIG.bak-token-stats when
+# it actually edits, so on a re-run (token-stats already enabled) there may be
+# no backup at all. Take one here when the first edit would not have.
+if [ ! -f "$CONFIG.bak-token-stats" ]; then
+  cp "$CONFIG" "$CONFIG.bak-token-stats"
+fi
 if grep -qE '^\s*-\s*["'"'"']?usage["'"'"']?\s*$' "$CONFIG"; then
   say "plugins.enabled already contains usage"
 else
-  if grep -qE '^\s*enabled:' "$CONFIG"; then
+  if grep -qE '^\s*enabled:\s*\[' "$CONFIG"; then
+    # Flow style (`enabled: [a, b]`) has no `- item` lines to append after.
+    # Rewrite the flow list in place rather than half-editing it.
+    "$PY" - "$CONFIG" <<'PYEOF3'
+import re, sys
+
+path = sys.argv[1]
+raw = open(path, newline="").read()
+eol = "\r\n" if "\r\n" in raw else "\n"
+
+# Locate a top-level `plugins:` block, then a flow-style `enabled: [...]`.
+lines = raw.splitlines(keepends=True)
+for i, line in enumerate(lines):
+    if re.match(r"^(\s+)enabled:\s*\[(.*)\]\s*$", line.rstrip("\r\n")):
+        m = re.match(r"^(\s+)enabled:\s*\[(.*)\]\s*$", line.rstrip("\r\n"))
+        indent, body = m.group(1), m.group(2)
+        items = [x.strip().strip("'\"") for x in body.split(",") if x.strip()]
+        if "usage" in items:
+            sys.exit(0)
+        items.append("usage")
+        lines[i] = f"{indent}enabled: [{', '.join(items)}]" + eol
+        open(path, "w", newline="").writelines(lines)
+        print("[ok] plugins.enabled += usage (flow style)")
+        sys.exit(0)
+
+sys.exit("no flow-style enabled: list found")
+PYEOF3
+    if [ "$?" = "0" ]; then
+      if [ "${RUAMEL_OK:-0}" = "1" ]; then
+        "$PY" -c "from ruamel.yaml import YAML; d = YAML().load(open('$CONFIG')); assert 'usage' in d['plugins']['enabled'], 'usage entry missing'; print('[ok] config.yaml parses, usage enabled')" \
+          || die "config.yaml edit failed validation for usage — restore from $CONFIG.bak-token-stats (if present)"
+      fi
+    else
+      warn "could not add 'usage' to the flow-style plugins.enabled — add it by hand to enable /usage"
+    fi
+  elif grep -qE '^\s*enabled:' "$CONFIG"; then
     "$PY" - "$CONFIG" <<'PYEOF2'
 import re, sys
 
@@ -516,7 +557,7 @@ PYEOF2
     if [ "$?" = "0" ]; then
       if [ "${RUAMEL_OK:-0}" = "1" ]; then
         "$PY" -c "from ruamel.yaml import YAML; d = YAML().load(open('$CONFIG')); assert 'usage' in d['plugins']['enabled'], 'usage entry missing'; print('[ok] config.yaml parses, usage enabled')" \
-          || die "config.yaml edit failed validation for usage — restore from $CONFIG.bak-token-stats"
+          || die "config.yaml edit failed validation for usage — restore from $CONFIG.bak-token-stats (if present)"
       fi
     else
       warn "could not append 'usage' to plugins.enabled — add '    - usage' by hand to enable /usage"
