@@ -320,7 +320,7 @@ Since Hermes v0.22.6 the gateway can also serve the **WebApp** — the full
 desktop bundle in the browser (gateway port 9120), a third surface next to
 the packaged desktop app and the web dashboard. The desktop plugin runs
 there **as-is**: pane and statusbar chip render and work in the WebApp
-already (rudimentary — first-class support is planned for v1.2, see
+already (rudimentary — first-class support is planned for v1.3, see
 roadmap).
 
 Install via the installer's client-only mode (on the Hermes host):
@@ -552,21 +552,7 @@ by **[@Thorballer](https://github.com/Thorballer)** — the command plugin,
 the no-fork price architecture and the macOS support below are his
 contribution, the first external one to this repo.
 
-**v1.2.0 (planned)** — first-class **Hermes WebApp** support (the
-browser-hosted desktop served by the gateway, Hermes ≥ v0.22.6). The pane
-and chip already render and work in the WebApp as-is (see *Hermes WebApp
-pane* above); v1.2 turns that into first-class support:
-
-- **Mobile interface** — the WebApp is the natural surface for phones;
-  the pane needs responsive treatment for small screens (the fixed 380px
-  desktop-pane geometry does not translate to a phone browser)
-- **Documented, smooth install path** — today the WebApp pane is
-  installed by the installer's client-only mode (plugin.js to
-  `~/.hermes/desktop-plugins/token-stats/` on the Hermes host) plus a
-  WebApp reload; v1.2 documents this path properly and makes it a
-  one-step flow
-
-**v1.3.0 (planned)** — scope: consumer tracking + the native "hermes proxy"
+**v1.2.0 (planned)** — scope: consumer tracking + the native "hermes proxy"
 
 - **hermes-proxy integration:** `hermes proxy` (local OpenAI-compatible
   forwarder to OAuth providers — external apps point at it with any bearer
@@ -577,7 +563,7 @@ pane* above); v1.2 turns that into first-class support:
   proxy must be visible in the pane (and priced correctly via the
   custom-prices layer, incl. provider-scoped overrides if the proxy
   reports its own provider string).
-- **LiteLLM consumer tracking** (previous plan for this slot, scope
+- **LiteLLM consumer tracking** (earlier plan for this slot, scope
   flexible): optional integration with a self-hosted
   [LiteLLM](https://github.com/BerriAI/litellm) proxy — the backend reads
   its Postgres spend logs and the pane shows **consumers** (services that
@@ -587,6 +573,20 @@ pane* above); v1.2 turns that into first-class support:
   existing state.db ledger, unchanged. If the native hermes-proxy route
   covers the real-world use cases, LiteLLM can stay parked — decide at
   build time which (or both) paths ship.
+
+**v1.3.0 (planned)** — first-class **Hermes WebApp** support (the
+browser-hosted desktop served by the gateway, Hermes ≥ v0.22.6). The pane
+and chip already render and work in the WebApp as-is (see *Hermes WebApp
+pane* above); v1.3 turns that into first-class support:
+
+- **Mobile interface** — the WebApp is the natural surface for phones;
+  the pane needs responsive treatment for small screens (the fixed 380px
+  desktop-pane geometry does not translate to a phone browser)
+- **Documented, smooth install path** — today the WebApp pane is
+  installed by the installer's client-only mode (plugin.js to
+  `~/.hermes/desktop-plugins/token-stats/` on the Hermes host) plus a
+  WebApp reload; v1.3 documents this path properly and makes it a
+  one-step flow
 
 **v2.0.0 (planned, far future)** — cross-platform support:
 

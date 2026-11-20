@@ -130,7 +130,7 @@ and follows the active theme. No Tailwind classes are used.
 > in the monorepo root README) runs as-is — pane and chip already work there
 > (rudimentary). That surface does not use `web-entry.js`; the ledger
 > backend answers unchanged. Smoothed WebApp support is roadmapped as
-> client v5.3 (see the [roadmap in the monorepo root](https://github.com/AndiAtom/hermes-token-stats#roadmap)).
+> client v1.3 (see the [roadmap in the monorepo root](https://github.com/AndiAtom/hermes-token-stats#roadmap)).
 
 | Scope | Web port |
 |---|---|
@@ -332,7 +332,7 @@ via `localStorage` (`token-stats:lang` / `token-stats:currency`) — same
 keys as the desktop. Since web.2 the histogram's cost-metric toggle icon
 follows the active currency (€/$) instead of a hardcoded €.
 
-**v0.8.0 (planned, alongside client v5.3)** — **Hermes WebApp support**
+**v0.8.0 (planned, alongside client v1.3)** — **Hermes WebApp support**
 (the browser-hosted desktop served by the gateway, Hermes ≥ v0.22.6).
 Status quo: the desktop plugin (`plugin.js`) already renders and works in
 the WebApp as-is — pane and chip — when it is installed on the gateway
@@ -340,7 +340,7 @@ host (`~/.hermes/desktop-plugins/token-stats/`). The backend (ledger
 daemon, routes, web entry) is **unchanged** by any of this today; the
 roadmapped work (mobile-friendly pane UI, a documented one-step install
 path) is client-side and tracked in the
-[client repo's v5.3 roadmap entry](https://github.com/AndiAtom/hermes-token-stats#roadmap).
+[client repo's v1.3 roadmap entry](https://github.com/AndiAtom/hermes-token-stats#roadmap).
 A backend release only becomes necessary if the install flow ends up
 touching `install.sh` or the plugin package.
 
