@@ -2,7 +2,7 @@
  * Token Stats — Hermes Web-Dashboard plugin entry (companion to the
  * desktop plugin.js in AndiAtom/hermes-token-stats).
  *
- * @version v1.1.2
+ * @version v1.1.3
  *
  * Port of the desktop pane design to the web dashboard plugin SDK
  * (window.__HERMES_PLUGIN_SDK__ + window.__HERMES_PLUGINS__.register).
@@ -49,7 +49,7 @@
   const fetchJSON = SDK.fetchJSON
   const h = React.createElement
   const ID = 'token-stats'
-  const VERSION = 'v1.1.2'
+  const VERSION = 'v1.1.3'
 
   // ── Injected stylesheet (namespaced .ts-* classes) ─────────────────
   // Built on theme vars so the active dashboard theme flows through:
@@ -1377,6 +1377,16 @@
     return n.toLocaleString(localeFor(_lang))
   }
 
+  // v1.1.3: CLI-parity provider labels — `model@provider` when the grain
+  // carries a provider, plain model otherwise (legacy RPC / unknown).
+  // Mirrors _model_label() in the backend usage plugin: never truncate the
+  // provider suffix — a truncated provider reads as a different one.
+  function providerLabel(model, provider) {
+    const m = String(model || '')
+    const p = String(provider || '').trim()
+    return p ? `${m}@${p}` : m
+  }
+
   function fmtDate(ts) {
     if (!ts) return ''
     const d = new Date(ts * 1000)
@@ -1699,8 +1709,14 @@
     // the ledger's last-db-snapshot live values.
     const modelAgg = {}
     for (const r of histByModel) {
-      const m = modelAgg[r.model] || (modelAgg[r.model] = {
+      // v1.1.3: grain = (model, billing_provider) — the same model via two
+      // providers stays two rows (costs were per-row all along; a merged
+      // single row would carry a lying label).
+      const bp = String(r.billing_provider || '').trim()
+      const key = r.model + '|' + bp
+      const m = modelAgg[key] || (modelAgg[key] = {
         model: r.model,
+        billing_provider: bp,
         in: 0, cached: 0, out: 0, calls: 0, sessions: new Set(), cost: 0, unpriced: false,
       })
       m.in += Math.max(r.input_tokens || 0, r.live_in || 0)
@@ -1728,6 +1744,7 @@
         out: s.output_tokens || 0,
         calls: s.api_call_count || 0,
         cost: 0, unpriced: false,
+        models: new Map(), // v1.1.3: model|provider → totals, for the row tooltip
       }))
     // Subagent costs: price each ledger model-row individually (a
     // subagent may use several models), using the same max'd counters.
@@ -1743,6 +1760,15 @@
       })
       if (c != null) s.cost += c
       else if ((r.input_tokens || 0) + (r.output_tokens || 0) > 0) s.unpriced = true
+      // v1.1.3: per-model breakdown (with provider) for the row tooltip —
+      // same shape as the aux models map. Key = model|provider composite so
+      // the same model via two providers stays two lines.
+      const mk = r.model + '|' + (r.billing_provider || '')
+      const mo = s.models.get(mk) || { in: 0, cached: 0, out: 0 }
+      mo.in += Math.max(r.input_tokens || 0, r.live_in || 0)
+      mo.cached += Math.max(r.cache_read_tokens || 0, r.live_cached || 0)
+      mo.out += Math.max(r.output_tokens || 0, r.live_out || 0)
+      s.models.set(mk, mo)
     }
     const maxSubTotal = subRows.reduce((m, e) => Math.max(m, e.in + e.cached + e.out), 0)
 
@@ -1770,12 +1796,15 @@
         model: r.model, billing_provider: r.billing_provider,
       })
       if (c != null) a.cost += c; else if ((r.input_tokens || 0) + (r.output_tokens || 0) > 0) a.unpriced = true
-      const mo = a.models.get(r.model) || { in: 0, cached: 0, out: 0, calls: 0 }
+      // v1.1.3: composite key model|provider for the aux models map so the
+      // tooltip shows the provider grain (CLI parity).
+      const mk = r.model + '|' + (r.billing_provider || '')
+      const mo = a.models.get(mk) || { in: 0, cached: 0, out: 0, calls: 0 }
       mo.in += Math.max(r.input_tokens || 0, r.live_in || 0)
       mo.cached += Math.max(r.cache_read_tokens || 0, r.live_cached || 0)
       mo.out += Math.max(r.output_tokens || 0, r.live_out || 0)
       mo.calls += Math.max(r.api_calls || 0, r.live_calls || 0)
-      a.models.set(r.model, mo)
+      a.models.set(mk, mo)
     }
     const auxAggList = Object.values(auxAgg)
       .sort((a, b) => ((b.in + b.cached + b.out) - (a.in + a.cached + a.out)))
@@ -1802,7 +1831,26 @@
       },
     }))
     for (const r of rows) {
-      r.cost = estimateCost({ input: r.u.input, cache_read: r.u.cache_read, output: r.u.output, model: r.u.model, billing_provider: r.u.billing_provider })
+      // v1.1.3 grain fix: price each model row of the session at ITS model's
+      // price and sum — the consolidated view priced aux-row tokens
+      // (background review, title gen — cheaper models) at the primary
+      // model's rate and drifted ~36% high on real sessions (21.11.2026).
+      // CLI /tokenstats has always priced grain-exact; this aligns chip+pane.
+      if (r.modelRows.length) {
+        let rCost = null, rUnpriced = false
+        for (const mr of r.modelRows) {
+          const c = estimateCost({ input: mr.input_tokens, cache_read: mr.cache_read_tokens, output: mr.output_tokens, model: mr.model, billing_provider: mr.billing_provider })
+          if (c != null) { rCost = (rCost || 0) + c }
+          else if ((mr.input_tokens || 0) + (mr.output_tokens || 0) > 0) rUnpriced = true
+        }
+        r.cost = rCost
+        r.costUnpriced = rUnpriced
+      } else {
+        // No grain rows (live-only session / legacy RPC source) — the old
+        // consolidated estimate is better than '—'.
+        r.cost = estimateCost({ input: r.u.input, cache_read: r.u.cache_read, output: r.u.output, model: r.u.model, billing_provider: r.u.billing_provider })
+        r.costUnpriced = false
+      }
     }
 
     // Sorted view (activity = server order + day separators).
@@ -2164,10 +2212,13 @@
                     if (showDays && row.lastActive != null && isDayCollapsed(dayKeyTs(row.lastActive))) continue
                     const u = row.u
                     const cached = u.cache_read || 0
+                    // v1.1.3 grain fix: cell shows the row-level grain cost —
+                    // each model row priced at its own model, like the CLI.
                     const cost = row.cost
+                    const costApprox = row.costUnpriced
                     const modelTip = row.modelRows.length
                       ? '\n' + t('modelsColon') + row.modelRows
-                          .map(m => `${m.model}${m.task ? ' (' + m.task + ')' : ''}: in ${fmt(m.input_tokens)}, ⚡ ${fmt(m.cache_read_tokens)}, out ${fmt(m.output_tokens)}`)
+                          .map(m => `${providerLabel(m.model, m.billing_provider)}${m.task ? ' (' + m.task + ')' : ''}: in ${fmt(m.input_tokens)}, ⚡ ${fmt(m.cache_read_tokens)}, out ${fmt(m.output_tokens)}`)
                           .join(' · ')
                       : ''
                     const resetTip = row.hadReset
@@ -2208,10 +2259,10 @@
                       h('td', {
                         className: 'ts-num ts-dim',
                         title: cost != null
-                          ? `${t('estimatedRow')}: ${fmtCost(cost, { full: true })}${modelTip}`
+                          ? `${t('estimatedRow')}: ${fmtCost(cost, { full: true })}${costApprox ? ' — ≈: unpriced models included' : ''}${modelTip}`
                           : 'No price for ' + (u.model || 'this model'),
                       }, cost != null
-                        ? fmtCost(cost)
+                        ? (costApprox ? '≈ ' : '') + fmtCost(cost)
                         : '—')))
                   }
                   return out
@@ -2229,17 +2280,19 @@
                 const total = m.in + m.cached + m.out
                 const mCost = m.cost > 0 ? fmtCost(m.cost) : null
                 const tip = m.sessions.size === 1 ? t('oneSession') : `${m.sessions.size} ${t('sessions', m.sessions.size)}`
+                // v1.1.3: CLI-parity label with the provider grain.
+                const mLabel = providerLabel(m.model, m.billing_provider)
                 const bar = maxModelTotal > 0 && total > 0
                   ? h('div', { className: 'ts-brkbar', style: { width: Math.max(4, total / maxModelTotal * 100) + '%' } })
                   : null
                 return h('div', {
                   className: 'ts-brkrow',
-                  key: m.model,
-                  title: `${m.model}\nIn: ${fmtFull(m.in)} · ⚡: ${fmtFull(m.cached)} · Out: ${fmtFull(m.out)}\n${t('grandTotalWord')} ${fmtFull(total)} ${t('tokensWord')} · Calls: ${fmtFull(m.calls)} · ${tip}${mCost != null ? ` · ${t('estimated')}: ${fmtCost(m.cost, { full: true })}` : (m.unpriced ? ' · ' + t('noPrice') : '')}`,
+                  key: m.model + '|' + m.billing_provider,
+                  title: `${mLabel}\nIn: ${fmtFull(m.in)} · ⚡: ${fmtFull(m.cached)} · Out: ${fmtFull(m.out)}\n${t('grandTotalWord')} ${fmtFull(total)} ${t('tokensWord')} · Calls: ${fmtFull(m.calls)} · ${tip}${mCost != null ? ` · ${t('estimated')}: ${fmtCost(m.cost, { full: true })}` : (m.unpriced ? ' · ' + t('noPrice') : '')}`,
                 },
                   bar,
                   h('div', { className: 'ts-brkname' },
-                    h('span', { className: 'nm' }, m.model),
+                    h('span', { className: 'nm' }, mLabel),
                     h('span', { className: 'mt' }, tip)),
                   h('div', { className: 'ts-brknum' },
                     h('span', { title: `${t('totalTokens')}: ${fmtFull(total)}` }, fmt(total)),
@@ -2256,13 +2309,20 @@
             h('div', { className: 'ts-brklist' },
               subRows.map(sr => {
                 const total = sr.in + sr.cached + sr.out
+                // v1.1.3: per-model tooltip — always shown, even for a
+                // single model (provider grain visible everywhere).
+                const srModelTip = sr.models.size > 0
+                  ? '\n' + t('modelsColon') + [...sr.models.entries()]
+                      .map(([mk, v]) => `${providerLabel(...mk.split('|'))}: in ${fmt(v.in)}, ⚡ ${fmt(v.cached)}, out ${fmt(v.out)}`)
+                      .join(' · ')
+                  : ''
                 const bar = maxSubTotal > 0 && total > 0
                   ? h('div', { className: 'ts-brkbar', style: { width: Math.max(4, total / maxSubTotal * 100) + '%' } })
                   : null
                 return h('div', {
                   className: 'ts-brkrow',
                   key: sr.id,
-                  title: `${sr.title}\n${sr.id}\nIn: ${fmtFull(sr.in)} · ⚡: ${fmtFull(sr.cached)} · Out: ${fmtFull(sr.out)}\n${t('grandTotalWord')} ${fmtFull(total)} ${t('tokensWord')} · Calls: ${fmtFull(sr.calls)}`,
+                  title: `${sr.title}\n${sr.id}\nIn: ${fmtFull(sr.in)} · ⚡: ${fmtFull(sr.cached)} · Out: ${fmtFull(sr.out)}\n${t('grandTotalWord')} ${fmtFull(total)} ${t('tokensWord')} · Calls: ${fmtFull(sr.calls)}${srModelTip}`,
                 },
                   bar,
                   h('div', { className: 'ts-brkname' },
@@ -2293,9 +2353,9 @@
                 const bar = maxAuxTotal > 0 && total > 0
                   ? h('div', { className: 'ts-brkbar', style: { width: Math.max(4, total / maxAuxTotal * 100) + '%' } })
                   : null
-                const modelTip = a.models.size > 1
+                const modelTip = a.models.size > 0
                   ? '\n' + t('modelsColon') + [...a.models.entries()]
-                      .map(([mo, v]) => `${mo}: in ${fmt(v.in)}, ⚡ ${fmt(v.cached)}, out ${fmt(v.out)}`)
+                      .map(([mk, v]) => `${providerLabel(...mk.split('|'))}: in ${fmt(v.in)}, ⚡ ${fmt(v.cached)}, out ${fmt(v.out)}`)
                       .join(' · ')
                   : ''
                 return h('div', {
