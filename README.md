@@ -301,10 +301,13 @@ Resolution order matches the clients (`PRICES_PROVIDER[provider][model]` →
 way `plugin.js` does. Unpriced models print `—` and are excluded from the
 total (`≈` prefix) rather than contributing a fabricated number.
 
-Costs are **USD list price**. The pane's user overrides (`prices.json`
+Costs are **USD list price with the EUR mirror in parentheses** —
+`$0.50 (€0.43)` — using the same `EUR_RATE` list-price constant the desktop
+plugin uses, read from the generated `prices.json`, so CLI and pane are
+consistent. The pane's user overrides (`prices.json`
 overrides / the backend `/prices` route), the EU ×1.1 region factor and the
-€/$ display toggle are UI-only and are *not* applied here, so a user on
-default EUR display will see a number that differs by the conversion rate.
+currency *display toggle* are UI-only and are *not* applied here, so a user
+on default EUR display will see a number that differs by the region factor.
 If the price table cannot be found at all, cost shows `—` instead of a
 guess.
 

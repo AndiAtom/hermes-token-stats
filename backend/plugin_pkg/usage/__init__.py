@@ -5,7 +5,9 @@ ledger DB directly (``mode=ro``), so it needs no gateway route and no
 ``ctx.rest`` — the native plugin and the desktop chip therefore read the
 same ledger, though the chip additionally applies the pane's UI-only
 settings (user price overrides, the EU region factor and the EUR display
-default); this command always reports USD list price.
+default); this command reports USD list price with the EUR list-price
+mirror in parentheses — same ``EUR_RATE`` the clients use, so CLI and
+pane cannot disagree.
 
 Windows mirror the pane's calendar presets: ``1d`` (today, since local
 midnight), ``5d`` (this workweek, Mon 00:00), ``30d`` (this calendar month,
@@ -100,7 +102,11 @@ def _normalize(raw: dict) -> dict:
     for name, sub in (raw.get("provider") or {}).items():
         if isinstance(sub, dict) and sub:
             prov[name] = {k: tuple(float(x) for x in v) for k, v in sub.items()}
-    return {"model": model, "provider": prov}
+    out = {"model": model, "provider": prov}
+    rate = raw.get("eur_rate")
+    if isinstance(rate, (int, float)) and rate > 0:
+        out["eur_rate"] = float(rate)
+    return out
 
 
 def _load_prices() -> dict:
@@ -153,6 +159,19 @@ def _load_prices() -> dict:
                      "both unavailable) — cost will render —")
     return _PRICE_CACHE
 
+
+# USD → EUR list-price mirror factor, shared source with the clients
+# (plugin.js EUR_RATE → generated prices.json → here). Same trade-off as the
+# price tables: this is the LIST-price equivalent, not a bank rate — it exists
+# so CLI and pane cannot disagree, not to track forex. Fallback 0.85 matches
+# the plugin.js constant a stale prices.json predating eur_rate was built from.
+FALLBACK_EUR_RATE = 0.85
+
+
+def _eur_rate() -> float:
+    rate = _load_prices().get("eur_rate")
+    return rate if isinstance(rate, float) and rate > 0 else FALLBACK_EUR_RATE
+
 WINDOWS = {
     "1d": ("today", "calendar"),
     "5d": ("this workweek", "workweek"),
@@ -160,6 +179,18 @@ WINDOWS = {
     "30d": ("this month", "month"),
     "all": ("all time", "all"),
 }
+
+
+def _fmt_cost(usd: Optional[float]) -> str:
+    """`$X.XX (€Y.YY)` — EUR in parentheses behind USD.
+
+    None (unpriced model) stays `—`; callers mark the block `≈`. EUR mirrors
+    list price via the shared EUR_RATE, NOT an exchange rate — same semantics
+    as the pane, so CLI and UI cannot disagree.
+    """
+    if usd is None:
+        return "—"
+    return f"${usd:.2f} (€{usd * _eur_rate():.2f})"
 
 HELP = """Usage: /tokenstats [1d|5d|7d|30d|all] [models] [session] [profile NAME]
 
@@ -400,7 +431,7 @@ def _render(window: str, want_models: bool, profile: str) -> str:
     lines.append(f"  {'tokens':<12} {_fmt_int(prompt + total_out)}")
     lines.append(f"  {'api calls':<12} {total_calls}")
     approx = "≈" if unpriced else ""
-    lines.append(f"  {'cost':<12} {approx}${cost_total:.2f}")
+    lines.append(f"  {'cost':<12} {approx}{_fmt_cost(cost_total)}")
 
     if want_models:
         lines.append("─" * 46)
@@ -416,15 +447,14 @@ def _render(window: str, want_models: bool, profile: str) -> str:
             acc[1] += r["known_cached"] or 0
             acc[2] += r["known_out"] or 0
             acc[3] += r["known_calls"] or 0
-        lines.append(f"  {'model':<24} {'tokens':>8} {'calls':>5} {'cost':>8}")
+        lines.append(f"  {'model':<24} {'tokens':>8} {'calls':>5} {'cost':>16}")
         for (model, provider) in sorted(
             per, key=lambda k: -(per[k][0] + per[k][1] + per[k][2])
         ):
             i, ca, o, calls = per[(model, provider)]
-            c = _cost(i, ca, o, model, provider)
-            cost = f"${c:.2f}" if c is not None else "—"
+            cost = _fmt_cost(_cost(i, ca, o, model, provider))
             lines.append(
-                f"  {model[:24]:<24} {_fmt_int(i + ca + o):>8} {calls:>5} {cost:>8}"
+                f"  {model[:24]:<24} {_fmt_int(i + ca + o):>8} {calls:>5} {cost:>16}"
             )
 
     if unpriced:
@@ -519,20 +549,19 @@ def _render_session(session_id: str, want_models: bool, profile: str) -> str:
     lines.append(f"  {'tokens':<12} {_fmt_int(prompt + total_out)}")
     lines.append(f"  {'api calls':<12} {total_calls}")
     approx = "≈" if unpriced else ""
-    lines.append(f"  {'cost':<12} {approx}${cost_total:.2f}")
+    lines.append(f"  {'cost':<12} {approx}{_fmt_cost(cost_total)}")
 
     # Always show the model breakdown for a session — a session is usually
     # single-model, and the cost claim is only checkable with the row visible.
     lines.append("─" * 46)
-    lines.append(f"  {'model':<24} {'tokens':>8} {'calls':>5} {'cost':>8}")
+    lines.append(f"  {'model':<24} {'tokens':>8} {'calls':>5} {'cost':>16}")
     for (model, provider) in sorted(
         groups, key=lambda k: -(groups[k][0] + groups[k][1] + groups[k][2])
     ):
         i, ca, o, calls = groups[(model, provider)]
-        c = _cost(i, ca, o, model, provider)
-        cost = f"${c:.2f}" if c is not None else "—"
+        cost = _fmt_cost(_cost(i, ca, o, model, provider))
         lines.append(
-            f"  {model[:24]:<24} {_fmt_int(i + ca + o):>8} {calls:>5} {cost:>8}"
+            f"  {model[:24]:<24} {_fmt_int(i + ca + o):>8} {calls:>5} {cost:>16}"
         )
     if unpriced:
         lines.append("  ≈ unpriced models excluded from the cost total")

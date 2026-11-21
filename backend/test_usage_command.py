@@ -4,8 +4,11 @@ Builds a throwaway ledger DB, points LEDGER_BASE at it, and drives the
 command handler end to end. No network, no Hermes core imports.
 """
 import importlib.util
+import json
 import os
+import re
 import sqlite3
+import tempfile
 import time
 import uuid
 
@@ -460,3 +463,80 @@ def test_session_composes_with_profile(usage, tmp_path):
     monkeypatch_hint = usage._handle_usage("session profile trading",
                                           session_id="x")
     assert "profile: trading" in monkeypatch_hint
+
+
+# ── EUR mirror (USD + EUR in parentheses) ─────────────────────────────
+
+def test_cost_line_shows_eur_mirror(usage, tmp_path):
+    """Every cost line shows `(€Y.YY)` behind `$X.XX`, via the shared rate."""
+    _make_ledger(str(tmp_path), [
+        {"sid": "s1", "model": "mistral-large-latest",
+         "in": 1_000_000, "cached": 0, "out": 0, "calls": 1},
+    ])
+    out = usage._handle_usage("")
+    rate = usage._eur_rate()
+    assert f"$0.50 (€{0.50 * rate:.2f})" in out
+
+
+def test_models_breakdown_shows_eur_mirror(usage, tmp_path):
+    _make_ledger(str(tmp_path), [
+        {"sid": "s1", "model": "mistral-large-latest",
+         "in": 1_000_000, "cached": 0, "out": 0, "calls": 1},
+    ])
+    out = usage._handle_usage("models")
+    rate = usage._eur_rate()
+    assert f"$0.50 (€{0.50 * rate:.2f})" in out  # also in the model row
+
+
+def test_session_view_shows_eur_mirror(usage, tmp_path):
+    _make_ledger(str(tmp_path), [
+        {"sid": "s", "model": "mistral-large-latest",
+         "in": 1_000_000, "cached": 0, "out": 0, "calls": 1},
+    ])
+    out = usage._handle_usage("session", session_id="s")
+    rate = usage._eur_rate()
+    assert f"$0.50 (€{0.50 * rate:.2f})" in out
+
+
+def test_eur_rate_matches_plugin_js_constant(usage):
+    """Drift guard: _eur_rate() must equal plugin.js EUR_RATE — the CLI
+    must not grow a second hardcoded rate any more than a second price
+    table. Fails stale when plugin.js changes without regenerating."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    js_path = os.path.join(here, "..", "plugin.js")
+    if not os.path.exists(js_path):
+        pytest.skip("plugin.js not present (installed layout)")
+    with open(js_path, encoding="utf-8") as fh:
+        src = fh.read()
+    m = re.search(r"const\s+EUR_RATE\s*=\s*(-?[\d.]+)", src)
+    assert m, "plugin.js EUR_RATE constant not found"
+    assert usage._eur_rate() == float(m.group(1))
+
+
+def test_eur_rate_fallback_without_prices_json(monkeypatch):
+    """No prices.json rate, no plugin.js: the documented fallback 0.85 (the
+    plugin.js constant) keeps EUR rendering instead of crashing."""
+    import importlib.util, shutil, uuid
+    dest = tempfile.mkdtemp(prefix="usage_norate_")
+    try:
+        plugin_dir = os.path.join(HERE, "plugin_pkg", "usage")
+        # prices.json copied but rate stripped, plugin.js unreachable
+        with open(os.path.join(plugin_dir, "prices.json")) as fh:
+            data = json.load(fh)
+        data.pop("eur_rate", None)
+        with open(os.path.join(dest, "prices.json"), "w") as fh:
+            json.dump(data, fh)
+        shutil.copy(os.path.join(plugin_dir, "__init__.py"),
+                    os.path.join(dest, "__init__.py"))
+        spec = importlib.util.spec_from_file_location(
+            "usage_norate_" + uuid.uuid4().hex, os.path.join(dest, "__init__.py"))
+        assert spec and spec.loader
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        monkeypatch.setattr(mod, "_PLUGIN_JS_CANDIDATES",
+                            ("/nonexistent/plugin.js",), raising=False)
+        monkeypatch.setattr(mod, "_PRICE_CACHE", None, raising=False)
+        assert mod._eur_rate() == 0.85
+        assert "(€" in mod._fmt_cost(1.0)
+    finally:
+        shutil.rmtree(dest, ignore_errors=True)
