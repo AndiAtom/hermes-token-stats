@@ -547,7 +547,10 @@ app, and the same source the chip and pane read, so the numbers agree.
 Unpriced models render `—` and are excluded from the total (marked `≈`)
 rather than contributing a fabricated cost. The session view (`v1.1.1`)
 composes with all of the above — `/tokenstats session profile trading`
-reads the current session from the trading profile's ledger. See
+reads the current session from the trading profile's ledger. Costs print
+as USD list price with the EUR mirror in parentheses (`v1.1.2`), and
+provider-scoped rows label as `model@provider` (`v1.1.2`); `models cost`
+sorts the breakdown by cost. See
 [*CLI: the `/tokenstats` command*](#cli-the-usage-command).
 
 Shipped as [PR #1](https://github.com/AndiAtom/hermes-token-stats/pull/1)
