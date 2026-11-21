@@ -550,7 +550,12 @@ composes with all of the above — `/tokenstats session profile trading`
 reads the current session from the trading profile's ledger. Costs print
 as USD list price with the EUR mirror in parentheses (`v1.1.2`), and
 provider-scoped rows label as `model@provider` (`v1.1.2`); `models cost`
-sorts the breakdown by cost. See
+sorts the breakdown by cost. Since `v1.1.3` the desktop session row and
+chip price each ledger model row at its own model's price — grain-exact
+like the CLI, instead of pricing the whole session at the primary
+model's rate (aux rows on cheaper models no longer inflate the number);
+the pane's model list and tooltips carry the same `model@provider`
+labels. See
 [*CLI: the `/tokenstats` command*](#cli-the-usage-command).
 
 Shipped as [PR #1](https://github.com/AndiAtom/hermes-token-stats/pull/1)
