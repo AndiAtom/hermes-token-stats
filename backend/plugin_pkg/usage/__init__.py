@@ -192,15 +192,74 @@ def _fmt_cost(usd: Optional[float]) -> str:
         return "—"
     return f"${usd:.2f} (€{usd * _eur_rate():.2f})"
 
-HELP = """Usage: /tokenstats [1d|5d|7d|30d|all] [models] [session] [profile NAME]
+
+def _model_label(model: str, provider: str, width: int = 24) -> str:
+    """`model@provider` when provider-scoped, else the model id.
+
+    Truncates the MODEL part (never the provider — a truncated provider
+    suffix would read as a different, wrong provider) to `width` chars.
+    """
+    if not provider:
+        return model[:width]
+    if len(model) + 1 + len(provider) <= width:
+        return model + "@" + provider
+    budget = width - len(provider) - 1  # -1 for the '@'
+    if budget < 4:  # degenerate: provider alone fills the column
+        return (model + "@" + provider)[:width]
+    return model[:budget] + "@" + provider
+
+
+def _label_width(groups: dict[tuple[str, str], list]) -> int:
+    """Column width for the breakdown. Computed from the RAW (model,
+    provider) keys — NOT from already-truncated labels, which would pin
+    the width at its own fallback forever. Min 24 (the historical layout
+    when no provider is scoped), capped at 36 so a long OpenRouter slug
+    cannot push the cost column off the pane."""
+    longest = max(
+        (len(m) + len(p) + 1 for m, p in groups), default=24
+    )
+    return min(36, max(24, longest))
+
+
+def _fmt_cost_or_none(i: int, ca: int, o: int,
+                      model: str, provider: str) -> Optional[float]:
+    """Group cost with the clients' zero-usage semantics.
+
+    estimateCost() in plugin.js returns null when in=cached=out=0 — a
+    zero-usage row is NOT a $0.00 claim, it is no claim at all (the pane
+    renders it as `—`). Mirror that so CLI and pane agree row by row.
+    """
+    if not i and not ca and not o:
+        return None
+    return _cost(i, ca, o, model, provider)
+
+
+def _model_sort_key(key: tuple[str, str], by_cost: bool,
+                    groups: dict[tuple[str, str], list]):
+    """Default: tokens desc (cheap-but-cached models still rank high, the
+    pane's reasoning). `models cost`: cost desc, unpriced last, then tokens
+    desc as the tiebreak."""
+    i, ca, o, _calls = groups[key]
+    tokens = -(i + ca + o)
+    if not by_cost:
+        return (tokens,)
+    c = _cost(i, ca, o, key[0], key[1])
+    return (c is None, -(c or 0.0), tokens)
+
+HELP = """Usage: /tokenstats [1d|5d|7d|30d|all] [models] [cost] [session] [profile NAME]
 
   /tokenstats            token totals for the last 7 days (default)
   /tokenstats 1d         today only (since local midnight)
   /tokenstats 5d         this workweek (since Mon 00:00)
   /tokenstats 30d        this calendar month (since the 1st)
   /tokenstats models     per-model breakdown for the window
+  /tokenstats models cost  breakdown sorted by cost (unpriced last)
   /tokenstats session    THIS session only (the CLI session you are in)
   /tokenstats profile X  read ledger profile X instead of 'default'
+
+Cost prints USD list price with the EUR list-price mirror in
+parentheses — $1.00 (€0.85) — the same EUR_RATE the desktop pane uses,
+not an exchange rate.
 """
 
 
@@ -353,7 +412,8 @@ def _session_activity() -> dict:
     return out
 
 
-def _render(window: str, want_models: bool, profile: str) -> str:
+def _render(window: str, want_models: bool, profile: str,
+            want_cost_sort: bool = False) -> str:
     path = _ledger_path(profile)
     if not os.path.exists(path):
         others = _profiles()
@@ -415,7 +475,7 @@ def _render(window: str, want_models: bool, profile: str) -> str:
         acc[2] += r["known_out"] or 0
         acc[3] += r["known_calls"] or 0
     for (model, provider), (i, ca, o, _calls) in groups.items():
-        c = _cost(i, ca, o, model, provider)
+        c = _fmt_cost_or_none(i, ca, o, model, provider)
         if c is None:
             unpriced = True
         else:
@@ -447,14 +507,17 @@ def _render(window: str, want_models: bool, profile: str) -> str:
             acc[1] += r["known_cached"] or 0
             acc[2] += r["known_out"] or 0
             acc[3] += r["known_calls"] or 0
-        lines.append(f"  {'model':<24} {'tokens':>8} {'calls':>5} {'cost':>16}")
+        width = _label_width(per)
+        labels = {k: _model_label(k[0], k[1], width) for k in per}
+        lines.append(f"  {'model':<{width}} {'tokens':>8} {'calls':>5} {'cost':>16}")
         for (model, provider) in sorted(
-            per, key=lambda k: -(per[k][0] + per[k][1] + per[k][2])
+            per, key=lambda k: _model_sort_key(k, want_cost_sort, per)
         ):
             i, ca, o, calls = per[(model, provider)]
-            cost = _fmt_cost(_cost(i, ca, o, model, provider))
+            cost = _fmt_cost(_fmt_cost_or_none(i, ca, o, model, provider))
             lines.append(
-                f"  {model[:24]:<24} {_fmt_int(i + ca + o):>8} {calls:>5} {cost:>16}"
+                f"  {labels[(model, provider)]:<{width}} "
+                f"{_fmt_int(i + ca + o):>8} {calls:>5} {cost:>16}"
             )
 
     if unpriced:
@@ -534,7 +597,7 @@ def _render_session(session_id: str, want_models: bool, profile: str) -> str:
         acc[2] += r["known_out"] or 0
         acc[3] += r["known_calls"] or 0
     for (model, provider), (i, ca, o, _calls) in groups.items():
-        c = _cost(i, ca, o, model, provider)
+        c = _fmt_cost_or_none(i, ca, o, model, provider)
         if c is None:
             unpriced = True
         else:
@@ -554,14 +617,17 @@ def _render_session(session_id: str, want_models: bool, profile: str) -> str:
     # Always show the model breakdown for a session — a session is usually
     # single-model, and the cost claim is only checkable with the row visible.
     lines.append("─" * 46)
-    lines.append(f"  {'model':<24} {'tokens':>8} {'calls':>5} {'cost':>16}")
+    width = _label_width(groups)
+    labels = {k: _model_label(k[0], k[1], width) for k in groups}
+    lines.append(f"  {'model':<{width}} {'tokens':>8} {'calls':>5} {'cost':>16}")
     for (model, provider) in sorted(
-        groups, key=lambda k: -(groups[k][0] + groups[k][1] + groups[k][2])
+        groups, key=lambda k: _model_sort_key(k, False, groups)
     ):
         i, ca, o, calls = groups[(model, provider)]
-        cost = _fmt_cost(_cost(i, ca, o, model, provider))
+        cost = _fmt_cost(_fmt_cost_or_none(i, ca, o, model, provider))
         lines.append(
-            f"  {model[:24]:<24} {_fmt_int(i + ca + o):>8} {calls:>5} {cost:>16}"
+            f"  {labels[(model, provider)]:<{width}} "
+            f"{_fmt_int(i + ca + o):>8} {calls:>5} {cost:>16}"
         )
     if unpriced:
         lines.append("  ≈ unpriced models excluded from the cost total")
@@ -583,6 +649,7 @@ def _handle_usage(raw_args: str = "", **kwargs) -> str:
         window = "7d"
         want_models = False
         want_session = False
+        want_cost_sort = False
         profile = "default"
 
         i = 0
@@ -594,6 +661,9 @@ def _handle_usage(raw_args: str = "", **kwargs) -> str:
                 window = tok
             elif tok in {"models", "all-models", "-m"}:
                 want_models = True
+            elif tok == "cost":
+                want_models = True
+                want_cost_sort = True
             elif tok == "session":
                 want_session = True
             elif tok == "profile":
@@ -608,7 +678,7 @@ def _handle_usage(raw_args: str = "", **kwargs) -> str:
         if want_session:
             sid = str(kwargs.get("session_id") or "")
             return _render_session(sid, want_models, profile)
-        return _render(window, want_models, profile)
+        return _render(window, want_models, profile, want_cost_sort)
     except Exception as exc:  # noqa: BLE001 — a slash command must never raise
         logger.debug("usage: handler failed", exc_info=True)
         return f"Token Stats: internal error ({exc})."

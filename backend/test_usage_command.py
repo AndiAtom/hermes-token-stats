@@ -540,3 +540,81 @@ def test_eur_rate_fallback_without_prices_json(monkeypatch):
         assert "(€" in mod._fmt_cost(1.0)
     finally:
         shutil.rmtree(dest, ignore_errors=True)
+
+
+# ── v1.1.2 candidates: provider label, zero-usage, cost sort ────────
+
+def test_models_breakdown_shows_provider_when_scoped(usage, tmp_path):
+    """A model billed on two providers produces TWO rows; the label must
+    disambiguate them (model@provider) or the reader cannot tell which
+    cost belongs to which provider."""
+    _make_ledger(str(tmp_path), [
+        {"sid": "s1", "model": "mistral-large-latest", "provider": "openrouter",
+         "in": 1_000_000, "cached": 0, "out": 0, "calls": 1},
+        {"sid": "s2", "model": "mistral-large-latest", "provider": "",
+         "in": 1_000_000, "cached": 0, "out": 0, "calls": 1},
+    ])
+    out = usage._handle_usage("models")
+    assert "mistral-large-latest@openrouter" in out
+    # both rows priced → no ≈ marker anywhere in the block
+    assert "≈" not in out
+
+
+def test_session_view_shows_provider_when_scoped(usage, tmp_path):
+    _make_ledger(str(tmp_path), [
+        {"sid": "s", "model": "mistral-large-latest", "provider": "openrouter",
+         "in": 1_000_000, "cached": 0, "out": 0, "calls": 1},
+    ])
+    out = usage._handle_usage("session", session_id="s")
+    assert "mistral-large-latest@openrouter" in out
+
+
+def test_zero_usage_row_is_dash_not_zero_dollar(usage, tmp_path):
+    """Zero-usage row mirrors the pane: '—', not '$0.00' — the pane's
+    estimateCost returns null on in=cached=out=0, and the CLI must not
+    claim a $0.00 cost the pane would not show."""
+    _make_ledger(str(tmp_path), [
+        {"sid": "s1", "model": "mistral-large-latest",
+         "in": 0, "cached": 0, "out": 0, "calls": 0},
+    ])
+    out = usage._handle_usage("models")
+    assert "≈ unpriced models excluded" in out
+    # the model ROW must carry the dash, not a zero-dollar claim
+    row = [l for l in out.splitlines() if "mistral-large-latest" in l][0]
+    assert row.rstrip().endswith("—")
+    assert "$0.00" not in row
+
+
+def test_models_cost_sorts_by_cost_not_tokens(usage, tmp_path):
+    """`models cost`: the expensive low-volume model must rank ABOVE the
+    cheap high-volume one — the default token sort would invert them."""
+    # codestral: $0.30/M in — 2M tokens = $0.60 → the expensive one here
+    # mistral-large: $0.50/M in — 1M tokens = $0.50 → cheaper despite fewer
+    _make_ledger(str(tmp_path), [
+        {"sid": "s1", "model": "mistral-large-latest",
+         "in": 1_000_000, "cached": 0, "out": 0, "calls": 1},
+        {"sid": "s2", "model": "codestral-latest",
+         "in": 2_000_000, "cached": 0, "out": 0, "calls": 1},
+    ])
+    out = usage._handle_usage("models cost")
+    assert "— unpriced models excluded" not in out
+    pos_codestral = out.index("codestral-latest")
+    pos_mistral = out.index("mistral-large-latest")
+    assert pos_codestral < pos_mistral, "cost sort must rank $0.60 above $0.50"
+
+
+def test_models_cost_params_compose(usage, tmp_path):
+    """`models cost` also implies the models breakdown (cost without
+    models would be a no-op — the flag composes like the pane's)."""
+    _make_ledger(str(tmp_path), [
+        {"sid": "s1", "model": "mistral-large-latest",
+         "in": 1_000_000, "cached": 0, "out": 0, "calls": 1},
+    ])
+    out = usage._handle_usage("7d models cost profile default")
+    assert "mistral-large-latest" in out
+
+
+def test_help_documents_eur_and_cost(usage):
+    out = usage._handle_usage("help")
+    assert "models cost" in out
+    assert "EUR_RATE" in out or "€0.85" in out
